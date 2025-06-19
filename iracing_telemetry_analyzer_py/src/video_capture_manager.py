@@ -8,24 +8,27 @@ import threading
 import time
 import datetime # For recording start time
 from pathlib import Path
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional, Any, TYPE_CHECKING # Added Any for AppStateManager initially
 
 # Conditional import for pyautogui for testing/CI environments
 try:
     import pyautogui
 except ImportError:
-    # Mock pyautogui if not available, useful for environments where it can't be installed/run
+    # Mock pyautogui if not available, useful for environments where it can't be installed/run.
     class MockPyAutoGUI:
         def __getattr__(self, name):
+            # This wrapper will be called for any attribute access on MockPyAutoGUI instance.
             def wrapper(*args, **kwargs):
-                print(f"MOCK pyautogui: Call to {name}({args=}, {kwargs=})")
+                # Using f-string with '=' for self-documenting expressions (Python 3.8+)
+                print(f"MOCK pyautogui: Call to {name}(args={args!r}, kwargs={kwargs!r})")
             return wrapper
     pyautogui = MockPyAutoGUI()
-    print("WARNING: pyautogui not found, using mock version. Hotkeys will not be sent.")
+    print("WARNING: pyautogui not found or import failed. Using mock version. Hotkeys will not be sent.")
 
 
 if TYPE_CHECKING:
-    from .app_settings import AppSettings # To avoid circular import if AppSettings might import this later
+    from .app_settings import AppSettings
+    from .app_state_manager import AppStateManager # For type hinting
 
 
 class RecorderState(enum.Enum):
@@ -44,19 +47,19 @@ class VideoCaptureManager:
     """
     Controls an external screen recorder via hotkeys and discovers captured video files.
     """
-    SCAN_INTERVAL_SECONDS = 5  # How often to scan for new video files
+    SCAN_INTERVAL_SECONDS = 5  # How often to scan for new video files.
 
-    def __init__(self, settings: 'AppSettings', app_state_manager: Optional[Any] = None): # AppStateManager for future use
+    def __init__(self, settings: 'AppSettings', app_state_manager: Optional['AppStateManager'] = None):
         """
         Initializes the VideoCaptureManager.
 
         Args:
             settings: An AppSettings instance containing configuration like
                       working_folder and hotkey strings.
-            app_state_manager: Optional AppStateManager for future state updates.
+            app_state_manager: Optional AppStateManager for future state updates from this manager.
         """
         self.settings = settings
-        self.app_state_manager = app_state_manager # Placeholder for future integration
+        self.app_state_manager = app_state_manager # Store for potential future use (e.g., reporting errors)
 
         self._recorder_status: RecorderState = RecorderState.STOPPED
         self.captured_video_files: List[Path] = []
@@ -69,8 +72,8 @@ class VideoCaptureManager:
         try:
             Path(self.settings.working_folder).mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            print(f"Error creating working folder {self.settings.working_folder}: {e}")
-            # Potentially raise or handle this more gracefully
+            print(f"Error creating working folder '{self.settings.working_folder}': {e}")
+            # Depending on severity, could raise error or set a "disabled" state.
 
     def _send_hotkey(self, hotkey_string: str) -> None:
         """
@@ -117,11 +120,11 @@ class VideoCaptureManager:
 
         working_dir = Path(self.settings.working_folder)
         if not working_dir.is_dir():
-            return # Working directory doesn't exist or is not a directory
+            return # Working directory doesn't exist or is not a directory.
 
-        # print(f"Scanning for videos in {working_dir} since {self._recording_start_time}...")
+        # print(f"Debug: Scanning for videos in {working_dir} since {self._recording_start_time}...")
         try:
-            for ext in ("*.mp4", "*.avi"):
+            for ext in ("*.mp4", "*.avi"): # Common video extensions
                 for filepath in working_dir.glob(ext):
                     if filepath.is_file():
                         try:
@@ -286,70 +289,62 @@ if __name__ == '__main__':
 
     mock_settings = MockAppSettings(temp_dir)
 
-    # Mock pyautogui for this test block to avoid actual key presses
-    original_pyautogui_hotkey = pyautogui.hotkey
-    def mock_hotkey_func(*args, **kwargs):
+    # --- Mock pyautogui for this test block to avoid actual key presses ---
+    # Store the original pyautogui.hotkey method (it could be the real one or the class-level mock)
+    original_pyautogui_hotkey_method = pyautogui.hotkey
+
+    # Define a test-specific mock function for pyautogui.hotkey
+    def local_mock_hotkey_func(*args, **kwargs):
         key_str = "+".join(args)
-        print(f"MOCK PYAUTOGUI: pyautogui.hotkey('{key_str}') would be called.")
+        print(f"LOCAL MOCK PYAUTOGUI: pyautogui.hotkey('{key_str}') called with {kwargs=}.")
 
-    # If pyautogui is already the MockPyAutoGUI, its hotkey is a wrapper.
-    # We want to specifically override the hotkey method of the pyautogui object (mock or real)
-    # This is a bit tricky due to the class-level mock if pyautogui wasn't imported.
-    # Let's assume pyautogui object (mock or real) is now in the global scope.
-    # If it's the real pyautogui, we monkeypatch. If it's our MockPyAutoGUI instance, we can patch its method.
-    # For simplicity, if it's already a mock, this might replace its generic wrapper.
-    # If it's the real one, this will prevent actual key presses.
-
-    # Store a reference to the original hotkey method (could be real or our class-level mock's)
-    original_hotkey_method = pyautogui.hotkey
-    # Then assign our test-specific mock
-    pyautogui.hotkey = mock_hotkey_func
-
+    # Apply the test-specific mock
+    pyautogui.hotkey = local_mock_hotkey_func
+    # --- End Mock pyautogui ---
 
     vcm = VideoCaptureManager(settings=mock_settings)
 
     print("\n1. Activating and starting recording...")
     vcm.activate(start_recording=True)
     assert vcm.get_recorder_status() == RecorderState.RUNNING
-    assert vcm._scan_timer is not None and vcm._scan_timer.is_alive()
-    print(f"Captured files after activate: {vcm.captured_video_files}")
+    assert vcm._scan_timer is not None and vcm._scan_timer.is_alive(), \
+        "Scan timer should be active after activation."
+    print(f"  Captured files after activate: {vcm.captured_video_files}")
 
     print("\n2. Simulating file creation...")
-    time.sleep(0.1) # Ensure time moves forward a bit
-    # Create dummy files *after* _recording_start_time was set
-    if vcm._recording_start_time: # Should be set by activate()
-        Path(temp_dir / "video1.mp4").write_text("dummy video 1 content")
-        Path(temp_dir / "some_other_file.txt").write_text("not a video")
-        # Make file modification time clearly after start (though OS might do this)
-        # For this test, direct creation should be fine.
-        print(f"  Created dummy files. Current time: {datetime.datetime.now()}, Recording started at: {vcm._recording_start_time}")
+    time.sleep(0.1) # Ensure time moves forward slightly for timestamp comparisons
+    if vcm._recording_start_time:
+        (temp_dir / "video1.mp4").write_text("dummy video 1 content")
+        (temp_dir / "some_other_file.txt").write_text("not a video")
+        print(
+            f"  Created dummy files. Current time: {datetime.datetime.now()}, "
+            f"Recording started at: {vcm._recording_start_time}"
+        )
     else:
-        print("  ERROR: _recording_start_time not set, cannot simulate file creation properly.")
+        # This case should ideally not be hit if activate() works correctly.
+        print("  ERROR: _recording_start_time not set; cannot simulate file creation accurately.")
 
-    # Manually trigger scan for testing (as timer might be too slow or fast for reliable test step)
-    # To do this properly, we'd need to stop the current timer and call _scan_for_new_videos directly.
-    # For this demo, let's assume the timer will run. We'll wait a bit longer than SCAN_INTERVAL_SECONDS
-    # to give it a chance, or we can just call it manually for more deterministic test.
-
-    # For controlled testing, let's manage the timer more directly or just call the scan method
+    # Manually trigger scan for deterministic testing
     if vcm._scan_timer:
-        vcm._scan_timer.cancel() # Stop the scheduled timer
-    vcm._scan_for_new_videos() # Call scan manually
-    assert Path(temp_dir / "video1.mp4") in vcm.captured_video_files
-    # Reschedule one more time for subsequent tests if needed, or rely on manual calls.
-    # For this test, subsequent operations will do their own scans or final scans.
-
+        vcm._scan_timer.cancel() # Stop the currently scheduled timer
+    print("  Manually triggering video scan...")
+    vcm._scan_for_new_videos() # Call scan logic directly
+    assert Path(temp_dir / "video1.mp4") in vcm.captured_video_files, \
+        "video1.mp4 should be discovered."
+    # Note: _scan_for_new_videos will reschedule itself if _timer_stop_event is not set.
+    # For this demo, subsequent operations will manage the timer or perform final scans.
 
     print("\n3. Pausing recording...")
     vcm.pause()
     assert vcm.get_recorder_status() == RecorderState.PAUSED
 
     print("\n4. Simulating another file while paused...")
-    Path(temp_dir / "video2.avi").write_text("dummy video 2 content")
-    # Scan again manually
-    if vcm._scan_timer: vcm._scan_timer.cancel()
+    (temp_dir / "video2.avi").write_text("dummy video 2 content")
+    if vcm._scan_timer and vcm._scan_timer.is_alive(): vcm._scan_timer.cancel() # Stop timer if it was rescheduled
+    print("  Manually triggering video scan...")
     vcm._scan_for_new_videos()
-    assert Path(temp_dir / "video2.avi") in vcm.captured_video_files
+    assert Path(temp_dir / "video2.avi") in vcm.captured_video_files, \
+        "video2.avi should be discovered."
 
     print("\n5. Resuming recording...")
     vcm.resume()
@@ -358,44 +353,46 @@ if __name__ == '__main__':
     print("\n6. Deactivating (highlight mode)...")
     captured_files = vcm.deactivate(is_highlight_mode=True)
     assert vcm.get_recorder_status() == RecorderState.STOPPED
-    assert vcm._scan_timer is None or not vcm._scan_timer.is_alive() # Timer should be stopped
-    print(f"Deactivated. Captured files list: {[f.name for f in captured_files]}")
-    assert len(captured_files) == 2 # video1.mp4, video2.avi
+    assert vcm._scan_timer is None or not vcm._scan_timer.is_alive(), \
+        "Scan timer should be stopped after deactivation."
+    print(f"  Deactivated. Captured files list: {[f.name for f in captured_files]}")
+    assert len(captured_files) == 2, "Should have discovered video1.mp4 and video2.avi."
     assert Path(temp_dir / "video1.mp4") in captured_files
     assert Path(temp_dir / "video2.avi") in captured_files
 
     print("\n7. Activating again (no immediate start), then stopping...")
-    vcm.activate(start_recording=False) # Just monitor
-    assert vcm.get_recorder_status() == RecorderState.STOPPED # Did not auto-start
-    Path(temp_dir / "video3.mp4").write_text("dummy video 3 content")
+    vcm.activate(start_recording=False) # Just set up monitoring
+    assert vcm.get_recorder_status() == RecorderState.STOPPED # Status remains STOPPED
 
-    # To ensure video3.mp4 might be found by stop()'s final scan,
-    # we need _recording_start_time to be before video3.mp4 creation.
-    # activate() resets _recording_start_time.
-    # Let's manually call scan before stop to ensure it's discovered with current _recording_start_time
-    if vcm._scan_timer: vcm._scan_timer.cancel()
+    (temp_dir / "video3.mp4").write_text("dummy video 3 content")
+    # Manually scan to ensure video3.mp4 is found with the new _recording_start_time
+    if vcm._scan_timer and vcm._scan_timer.is_alive(): vcm._scan_timer.cancel()
+    print("  Manually triggering video scan before stop...")
     vcm._scan_for_new_videos()
-
 
     captured_files_on_stop = vcm.stop()
     assert vcm.get_recorder_status() == RecorderState.STOPPED
-    print(f"Stopped. Captured files list: {[f.name for f in captured_files_on_stop]}")
-    assert Path(temp_dir / "video3.mp4") in captured_files_on_stop
-    assert len(captured_files_on_stop) == 1 # Only files since the last activate
+    print(f"  Stopped. Captured files list: {[f.name for f in captured_files_on_stop]}")
+    assert Path(temp_dir / "video3.mp4") in captured_files_on_stop, \
+        "video3.mp4 should be the only file discovered in this session."
+    assert len(captured_files_on_stop) == 1, \
+        "Only files since the last activate() call should be returned."
 
-    # Restore original pyautogui.hotkey if it was monkeypatched
-    pyautogui.hotkey = original_hotkey_method
+    # --- Restore original pyautogui.hotkey ---
+    pyautogui.hotkey = original_pyautogui_hotkey_method
     print("\nRestored original pyautogui.hotkey method.")
+    # --- End Restore ---
 
     # Clean up temporary directory
+    print("\nCleaning up temporary directory and files...")
     try:
         for item in temp_dir.iterdir():
-            item.unlink()
-        temp_dir.rmdir()
-        print(f"\nCleaned up temporary directory: {temp_dir.resolve()}")
+            item.unlink() # Delete files first
+        temp_dir.rmdir()  # Then delete directory
+        print(f"  Successfully cleaned up: {temp_dir.resolve()}")
     except Exception as e:
-        print(f"Error cleaning up temp directory: {e}")
+        print(f"  Error during cleanup of {temp_dir.resolve()}: {e}")
 
-    print("\nVideoCaptureManager Demonstration finished.")
+    print("\nVideoCaptureManager demonstration finished.")
 
 ```

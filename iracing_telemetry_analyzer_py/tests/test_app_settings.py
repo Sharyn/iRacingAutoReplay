@@ -6,7 +6,10 @@ from pathlib import Path
 # If 'src' is the top-level package for pytest, then it's 'src.app_settings'.
 # If 'iracing_telemetry_analyzer_py' is the top-level, then 'iracing_telemetry_analyzer_py.src.app_settings'
 # For now, assuming pytest runs from root and iracing_telemetry_analyzer_py is in PYTHONPATH or installed.
-from iracing_telemetry_analyzer_py.src.app_settings import AppSettings, DEFAULT_SETTINGS, CONFIG_DIR_NAME, SETTINGS_FILE_NAME
+from iracing_telemetry_analyzer_py.src.app_settings import (
+    AppSettings, DEFAULT_SETTINGS, CONFIG_DIR_NAME, SETTINGS_FILE_NAME
+)
+from typing import Dict, Any # Added for type hint clarity in helper
 
 # Helper to compare AppSettings instance against a dictionary of expected values
 def assert_settings_match_dict(settings_obj: AppSettings, expected_dict: Dict[str, Dict[str, Any]]):

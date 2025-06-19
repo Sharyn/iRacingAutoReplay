@@ -166,18 +166,15 @@ def test_transcode_full_video_setup(
     assert str(output_file) in cmd_args
     assert "-vcodec" in cmd_args and "libx264" in cmd_args
     assert "-acodec" in cmd_args and "aac" in cmd_args
-    assert "-b:v" # Bitrate flag in ffmpeg CLI is -b:v
-    # The mock reconstructs video_bitrate as a kwarg, so it might be -video_bitrate if not careful.
-    # The actual ffmpeg-python uses `-b:v`. Let's assume the mock or real library handles this.
-    # For now, check if the value is there.
+    # Check for the bitrate value. The flag (-b:v or -video_bitrate) depends on ffmpeg-python vs mock.
     assert str(mock_app_settings.video_bitrate) in cmd_args
 
     # Filter assertions (SimpleTimestampOverlay provides one drawtext filter)
-    # The mock command reconstruction needs to be good for this.
-    # Our current mock's reconstruction of filter_complex is very basic.
-    # Let's check for presence of "drawtext" and the font name.
-    assert "-filter_complex" in cmd_args or any("drawtext" in arg for arg in cmd_args if arg.startswith("drawtext="))
-    assert mock_app_settings.preferred_font_path in cmd_line_printed # Check raw string for font path
+    # The mock command reconstruction should include -filter_complex if filters are applied.
+    assert "-filter_complex" in cmd_args, \
+        "'-filter_complex' flag should be present if overlays are applied by the mock."
+    assert mock_app_settings.preferred_font_path in cmd_line_printed, \
+        "Font path from settings should be part of the command line (likely in filter_complex string)."
 
     # Full video specific: No -ss or -t for the main input (or covers full duration)
     # This depends on how the mock reconstructs. If -ss is 0 or not present, it's fine.

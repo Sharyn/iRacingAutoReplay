@@ -1,4 +1,5 @@
 import pytest
+import math # Added for math.isclose
 from pathlib import Path
 from typing import List, Any # Dict needed for MockAppSettings if used as dict
 
@@ -74,11 +75,10 @@ def test_analyze_replays_and_generate_highlight_edits(mock_app_settings: AppSett
         assert all(isinstance(segment, VideoEdit) for segment in highlight_segments)
 
     # --- Assertions based on ReplayAnalyzer's simulated data ---
-    # ReplayAnalyzer simulation logic:
-    # - Adds 2 initial 'Incident' events:
-    #   - Event 1: 5.0s - 8.0s (duration 3s), with_overtake=True (PRIMARY)
+    # ReplayAnalyzer simulation logic (as of last update):
+    # - Adds 2 initial 'Incident' events, both with with_overtake=True:
+    #   - Event 1: 5.0s - 10.0s (duration 5s), with_overtake=True (PRIMARY)
     #   - Event 2: 25.0s - 30.0s (duration 5s), with_overtake=True (PRIMARY)
-    #     (Note: Original ReplayAnalyzer had second incident with_overtake=True, not False as I might have recalled)
     # - Loop (100 virtual seconds, 2 samples/sec = 200 iterations):
     #   - current_sample_time goes from 0.0 to 99.5
     #   - Adds LeaderBoardSnapshot, CamDriver at each step.
@@ -123,44 +123,50 @@ def test_analyze_replays_and_generate_highlight_edits(mock_app_settings: AppSett
 
     # Assertions on the content of segments based on expected incidents
     # We expect the two 'Incident' events to be the primary content.
-    # Incident 1: 5.0s - 8.0s
-    # Incident 2: 25.0s - 30.0s
-    # These should be selected by the PRIMARY category.
-    # Other categories (SECONDARY, TERTIARY, BACKGROUND) will find no other events from ReplayAnalyzer's current output.
+    # Incident 1: 5.0s - 10.0s (duration 5s)
+    # Incident 2: 25.0s - 30.0s (duration 5s)
+    # Both are with_overtake=True, so they are PRIMARY candidates.
+    # Other categories (SECONDARY, TERTIARY, BACKGROUND) will find no other significant distinct events
+    # from ReplayAnalyzer's current output that don't overlap these or are 'GenericInfo'.
 
     # The video_editing module sorts all selected events and then merges.
     # If only these two incidents are selected, they will remain separate segments.
     assert len(highlight_segments) >= 1, "Expected at least one segment from the primary incidents."
 
-    # Check if the segments correspond to the known "Incident" events.
-    # This is a bit fragile as it depends on internal sorting and selection of video_editing.
-    # However, given these are strong "Incident with overtake" events, they should be picked.
-
     # A more robust check: ensure the *times* of the known important events are covered.
-    incident1_covered = any(s.start_time <= 5.0 and s.end_time >= 8.0 for s in highlight_segments)
+    incident1_covered = any(s.start_time <= 5.0 and s.end_time >= 10.0 for s in highlight_segments)
     incident2_covered = any(s.start_time <= 25.0 and s.end_time >= 30.0 for s in highlight_segments)
 
     # If the selection logic picks *only* these two and they don't get merged with anything else:
-    if len(highlight_segments) == 2: # Assuming only the two incidents are selected and are separate
-        assert incident1_covered, "The first incident (5-8s) was not covered by a highlight segment."
+    # Their total duration is 5s + 5s = 10s. Primary allocation is 0.4 * 30s = 12s. So both should fit.
+    if len(highlight_segments) == 2:
+        assert incident1_covered, "The first incident (5-10s) was not covered by a highlight segment."
         assert incident2_covered, "The second incident (25-30s) was not covered by a highlight segment."
-        expected_total_duration = (8.0 - 5.0) + (30.0 - 25.0) # 3s + 5s = 8s
+        expected_total_duration = (10.0 - 5.0) + (30.0 - 25.0) # 5s + 5s = 10s
         assert math.isclose(total_kept_duration, expected_total_duration, abs_tol=0.1), \
-            f"Total duration {total_kept_duration} not matching expected {expected_total_duration} for two incidents."
+            f"Total duration {total_kept_duration:.2f}s not matching expected {expected_total_duration:.2f}s for two incidents."
     else:
-        # If more segments, or merged segments, this indicates other events were picked or merging occurred.
-        # This would require deeper analysis of ReplayAnalyzer's output vs video_editing's selection.
-        # For now, let's assume the primary incidents are the main drivers.
-        # The current ReplayAnalyzer doesn't create other strong candidates for SECONDARY/TERTIARY/BACKGROUND.
-        print(f"Warning: Number of segments is {len(highlight_segments)}, expected 2 if only incidents were chosen.")
-        # At least check they are covered.
+        # This case might occur if other minor events get selected or merging behavior changes.
+        print(
+            f"Warning: Number of segments is {len(highlight_segments)}, expected 2 if only the two "
+            f"main incidents were chosen and remained separate. Actual total duration: {total_kept_duration:.2f}s."
+        )
+        # At least check they are covered if the segment count is different.
         assert incident1_covered or incident2_covered, "At least one of the main incidents should be covered."
 
 
     # Total duration assertion
+    # target_total_duration = 30s. Max event duration for primary is 20s.
+    # The two incidents sum to 10s. This is well within the 12s allocated for PRIMARY.
+    # So, total_kept_duration should be close to 10s if no other categories contribute significantly.
     assert total_kept_duration <= mock_app_settings.highlight_video_target_duration_seconds + 2.0, \
-        f"Total duration {total_kept_duration} exceeds target {mock_app_settings.highlight_video_target_duration_seconds} significantly."
-        # Adding a small tolerance (e.g. 2s) for merging logic that might extend segments slightly.
+        f"Total duration {total_kept_duration:.2f}s exceeds target " \
+        f"{mock_app_settings.highlight_video_target_duration_seconds}s significantly."
+    # A more specific check for this case, given the input:
+    if len(highlight_segments) == 2 : # If it matches the simple two-incident case
+         assert math.isclose(total_kept_duration, 10.0, abs_tol=0.1), \
+            "With current ReplayAnalyzer data, expected total duration of highlights to be around 10s."
+
 
     # Cleanup of the generated XML file is handled by tmp_path if it's under mock_app_settings.working_folder
     # which it is.

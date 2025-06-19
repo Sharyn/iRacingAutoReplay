@@ -13,17 +13,21 @@ if TYPE_CHECKING:
     from .app_settings import AppSettings
     from .plugin_manager import PluginManager
     from .replay_data import OverlayData
-    from .video_editing import VideoEdit # For type hint
+    from .video_editing import VideoEdit  # For type hint
+
 
 # Attempt to import ffmpeg-python
 try:
     import ffmpeg
 except ImportError:
     print("WARNING: ffmpeg-python not found. Using a mock FFmpeg library.")
-    print("Transcoding will not actually occur. FFmpeg commands will be printed.")
+    print("Transcoding will not actually occur. FFmpeg commands will be printed instead.")
+
 
     class MockFFmpegNode:
-        def __init__(self, name: str = "node", prev_node: Optional['MockFFmpegNode'] = None, stream_name: Optional[str] = None):
+        def __init__(self, name: str = "node",
+                     prev_node: Optional['MockFFmpegNode'] = None,
+                     stream_name: Optional[str] = None):
             self._name = name
             self._prev_node = prev_node
             self._kwargs: Dict[str, Any] = {}
@@ -33,93 +37,153 @@ except ImportError:
 
         def __getattr__(self, name: str):
             # Allows chaining undefined methods, assuming they are ffmpeg operations
-            # e.g., .filter(), .output(), .global_args()
+            # (e.g., .filter(), .output(), .global_args()).
             def method_wrapper(*args, **kwargs):
-                print(f"MOCK FFMPEG: .{name}(args={args}, kwargs={kwargs}) called on {self._name}")
-                # Store kwargs for later inspection if needed, especially for output
-                if name == "output":
-                    self._output_filename = args[0] if args else "unknown_output.mp4"
-                    self._kwargs.update(kwargs) # Store output settings
-                elif name == "global_args":
-                    self._global_args.extend(args)
-                else:
-                    # For filters or other operations, just chain
-                    self._kwargs[name] = {"args": args, "kwargs": kwargs}
+                # Using f-string with '=' for self-documenting expressions (Python 3.8+)
+                print(f"MOCK FFMPEG: .{name}(args={args!r}, kwargs={kwargs!r}) called on {self._name}")
 
-                # Return a new node to allow further chaining if it's a filter-like op
-                # or self if it's a terminal op like output (though run is truly terminal)
-                # For simplicity, always return a new node for chaining, run will be special
-                new_stream_name = self._stream_name
-                if name == "filter_complex": # or .filter()
-                    # A real filter_complex can define output streams.
-                    # This mock is too simple to track that. Assume one main output.
-                    pass # Keep current stream name or assume it's modified
-                return MockFFmpegNode(name=f"{self._name}.{name}", prev_node=self, stream_name=new_stream_name)
+                new_node = MockFFmpegNode(
+                    name=f"{self._name}.{name}",
+                    prev_node=self,
+                    stream_name=self._stream_name # Default to inheriting, filter_complex might change this
+                )
+
+                if name == "output":
+                    new_node._output_filename = args[0] if args else "unknown_output.mp4"
+                    new_node._kwargs.update(kwargs) # Store output settings on the new node
+                elif name == "global_args":
+                    # Global args should ideally apply to the whole command, not just a node.
+                    # This mock structure might need refinement for global_args to be perfectly accurate.
+                    # For now, assume they are collected and applied at run time by traversing.
+                    new_node._global_args.extend(args) # Store on new node, run() will collect them
+                elif name == "filter_complex":
+                    # Store filter_complex arguments on the new node.
+                    # The actual filter graph string is usually the first arg.
+                    new_node._kwargs[name] = {"args": args, "kwargs": kwargs}
+                    # In real ffmpeg-python, filter_complex can define new output stream names.
+                    # This mock is too simple to parse the filter string and track those.
+                    # We'll assume the output of a filter_complex chain is implicitly handled or
+                    # the next operation correctly refers to it if needed.
+                else: # Other filter-like operations
+                    new_node._kwargs[name] = {"args": args, "kwargs": kwargs}
+
+                return new_node
             return method_wrapper
 
-        def get_real_node(self, stream_specifier: Optional[str] = None) -> 'MockFFmpegNode':
-            # In real ffmpeg-python, this might select a specific stream. Mock just returns self.
-            return self
+        def __getitem__(self, item: str) -> 'MockFFmpegNode':
+            """Allows stream selection like stream['outv']."""
+            print(f"MOCK FFMPEG: Stream selection ['{item}'] on {self._name}")
+            # Return a new node representing this specific output stream from a filter_complex
+            return MockFFmpegNode(name=f"{self._name}[{item}]", prev_node=self, stream_name=item)
 
-        def run(self, cmd: Optional[List[str]] = None, pipe_stdin: bool = False, pipe_stdout: bool = False, pipe_stderr: bool = False, quiet: bool = False, overwrite_output: bool = False):
-            # This is the terminal operation for the mock.
-            # It would try to reconstruct and print the command.
-            # This is a simplified reconstruction.
-            print("MOCK FFMPEG: .run() called")
-            full_cmd_list = ["ffmpeg"]
-            if self._global_args:
-                full_cmd_list.extend(self._global_args)
+        def _collect_args_for_run(self) -> List[str]:
+            """Helper to reconstruct the command list by traversing back through nodes."""
+            # This method reconstructs the command based on the chain of nodes.
+            # It's a simplified representation of how ffmpeg-python builds its command.
 
-            # Reconstruct inputs (very simplified)
-            # Need to traverse back from self._prev_node if it exists
-            current_node = self
-            input_nodes = []
-            while current_node is not None:
-                if current_node._name.startswith("input"): # or current_node._name == "node.input"
-                    input_nodes.append(current_node)
-                current_node = current_node._prev_node
+            # Traverse to the earliest node to build command in order
+            node_chain = []
+            curr = self
+            while curr is not None:
+                node_chain.append(curr)
+                curr = curr._prev_node
+            node_chain.reverse()
 
-            for i_node in reversed(input_nodes): # Add inputs first
-                # i_node._kwargs likely contains the filename in 'filename' or as first arg of input()
-                # This part is tricky to reconstruct accurately without more state.
-                fn = i_node._kwargs.get('input', {}).get('args', ["unknown_input.mp4"])[0]
-                # Add input options like -ss, -t if stored in i_node._kwargs
-                if 'ss' in i_node._kwargs.get('input',{}).get('kwargs',{}):
-                    full_cmd_list.extend(['-ss', str(i_node._kwargs['input']['kwargs']['ss'])])
-                if 't' in i_node._kwargs.get('input',{}).get('kwargs',{}):
-                     full_cmd_list.extend(['-t', str(i_node._kwargs['input']['kwargs']['t'])])
-                full_cmd_list.extend(["-i", fn])
+            cmd_list = ["ffmpeg"]
 
+            # Collect global args from all nodes (could be improved to be truly global)
+            for node in node_chain:
+                cmd_list.extend(node._global_args)
 
-            # Add filter_complex if present (super simplified)
-            if 'filter_complex' in self._kwargs:
-                fc_args = self._kwargs['filter_complex']['args']
+            input_files_options = [] # To store options per input file
+
+            for node in node_chain:
+                if node._name == "input" or node._name == "node.input": # Initial input node
+                    input_args = node._kwargs.get('input', {})
+                    filename = input_args.get('args', ["unknown_input.mp4"])[0]
+                    options = []
+                    if 'ss' in input_args.get('kwargs', {}):
+                        options.extend(['-ss', str(input_args['kwargs']['ss'])])
+                    if 't' in input_args.get('kwargs', {}):
+                        options.extend(['-t', str(input_args['kwargs']['t'])])
+                    options.extend(['-i', filename])
+                    input_files_options.append(options)
+
+            for opts in input_files_options: # Add all input files and their options
+                cmd_list.extend(opts)
+
+            # Process other operations (filters, output options) from the final node's perspective
+            # This part of mock is very simplified as complex filter graphs are hard to reconstruct.
+            final_node = node_chain[-1]
+
+            if 'filter_complex' in final_node._kwargs:
+                fc_args = final_node._kwargs['filter_complex']['args']
                 if fc_args:
-                    full_cmd_list.extend(["-filter_complex", fc_args[0]])
+                    cmd_list.extend(["-filter_complex", fc_args[0]])
 
-            # Add output options
-            for key, value in self._kwargs.items():
-                if key not in ['input', 'filter_complex', 'output', 'global_args', 'run'] and isinstance(value, dict) and 'args' not in value : # Simple output options
-                    full_cmd_list.extend([f"-{key}", str(value)])
+            # Add output options from the node that called .output()
+            # The _output_filename and output kwargs are stored on the node *returned* by .output()
+            output_node = final_node # Assume final node is the output node after .output() was called
+            if output_node._output_filename:
+                # Add specific output settings stored in output_node._kwargs
+                # These were stored directly by __getattr__ when name == "output"
+                for key, value in output_node._kwargs.items():
+                     # Check if it's an output option (and not a stored operation dict)
+                    if key not in ['input', 'filter_complex', 'output', 'global_args', 'run'] and not isinstance(value, dict):
+                        cmd_list.extend([f"-{key}", str(value)])
 
-            if overwrite_output or ('y' not in self._global_args and '-y' not in self._global_args) :
-                 full_cmd_list.append("-y") # Default to overwrite for mocks
+                # Default to overwrite if not specified in global_args
+                # Check if -y or -n is already in global_args
+                has_overwrite_option = any(arg in ['-y', '-n'] for arg in cmd_list if arg.startswith('-'))
+                if not has_overwrite_option:
+                    cmd_list.append("-y")
+
+                cmd_list.append(output_node._output_filename)
+            else: # Fallback if output filename wasn't captured
+                if not any(arg.startswith("mock_output") for arg in cmd_list): # Avoid adding if already there
+                    cmd_list.append("mock_output.mp4")
+
+            return cmd_list
+
+        def run(self, cmd: Optional[List[str]] = None, pipe_stdin: bool = False,
+                pipe_stdout: bool = False, pipe_stderr: bool = False,
+                quiet: bool = False, overwrite_output: bool = False):
+            print("MOCK FFMPEG: .run() called")
+
+            # If overwrite_output is True, ensure -y is a global arg for reconstruction
+            if overwrite_output and '-y' not in self._global_args:
+                self._global_args.append('-y')
+
+            final_cmd_list = self._collect_args_for_run()
+
+            # Store for test inspection (e.g., on a class variable of MockFFmpegNode or MockProcess)
+            # For simplicity, let's assume tests will capture stdout for the command.
+            # Or, if this `run` method returns the process, store it on the process.
+            print(f"MOCK FFMPEG CMD: {' '.join(shlex.quote(str(s)) for s in final_cmd_list)}")
 
             if self._output_filename:
-                full_cmd_list.append(self._output_filename)
-            else:
-                full_cmd_list.append("mock_output.mp4")
+                Path(self._output_filename).touch() # Simulate output file creation
 
-            print(f"MOCK FFMPEG CMD: {' '.join(shlex.quote(str(s)) for s in full_cmd_list)}")
+            # For run_async, it should return a Popen-like object.
+            # This run() method here is synchronous for the mock.
+            # Let's make run() call run_async().wait() for simplicity or vice-versa.
+            # The current structure has run() as the main method that constructs MockProcess.
+            # Let's rename this to run_async and have run() call it.
+            # For this subtask, I'll keep run() as the one that returns MockProcess as per existing transcoder code.
 
-            # Simulate running by creating a dummy output file
-            if self._output_filename:
-                Path(self._output_filename).touch()
+            mock_process = MockProcess(final_cmd_list)
+            # Store command on process for easier test access
+            mock_process.cmd_list_for_test = final_cmd_list
+            return mock_process
 
-            # For run_async, it should return a Popen-like object
-            class MockProcess:
-                def __init__(self, cmd_list):
-                    self.cmd_list = cmd_list
+    class MockProcess: # Moved this to be a top-level class in the mock structure
+        def __init__(self, cmd_list):
+            self.cmd_list_for_test = cmd_list # For inspection
+            self.pid = 12345 # Mock PID
+            self.returncode: Optional[int] = None
+            # Simulate stderr for progress parsing
+            self.stderr = self._mock_stderr_progress()
+            self.stdout = None # Not typically used for progress
                     self.pid = 12345 # Mock PID
                     # Simulate stderr for progress parsing
                     self.stderr = self._mock_stderr_progress()
@@ -315,28 +379,41 @@ class FFmpegTranscoder:
                 # For now, this is a conceptual application. A single drawtext is easier.
                 # Let's simplify to one filter for this example, assuming the plugin returns one drawtext.
                 if len(overlay_filter_strings) == 1 and overlay_filter_strings[0].startswith("drawtext"):
-                    # Manually parse common drawtext options for the .drawtext() method
-                    # This is brittle. Prefer plugins returning structured data or using filter_complex.
-                    # Example: "drawtext=text='foo':x=10:y=10:fontfile='Arial':fontsize=20:fontcolor='white'"
-                    # For now, let's assume the plugin returns a string that can be put into filter_complex
-                    # This is a simplification; a robust system would have plugins return structured filter defs
-                    # or the plugin manager would be smarter about combining them.
-                    # If the plugin_manager.get_current_filters returns a list of strings for filter_complex:
-                    if complex_filter_str: # Check if any filters were actually generated
-                         video_stream = video_stream.filter_complex(complex_filter_str)
-                         # The output of filter_complex needs to be specified if not automatically chained.
-                         # If the last label was e.g. [vN], that's the output.
-                         # ffmpeg().output(video_stream[current_stream_label], ...)
-                         # This requires the MockFFmpegNode to support __getitem__ for stream selection.
-                         # For now, assume filter_complex modifies the stream in place (not true for real ffmpeg-python)
-                         # or that the mock handles this.
-                         # The mock needs to be smarter or the real ffmpeg-python will be used.
-                         # If real ffmpeg-python, and complex_filter_str is like "[0:v]drawtext=...[outv]",
-                         # then you'd use .filter_complex(complex_filter_str) and then in .output, map 'outv'.
-                         # This is too complex for the current mock.
-                         # Let's assume the mock just notes filter_complex was called.
-                         # And if it's real ffmpeg-python, assume the filter_complex string is valid.
-                         pass # video_stream = video_stream.filter_complex(complex_filter_str) is the conceptual step.
+                    # This part assumes `get_current_filters` returns strings suitable for a single
+                    # complex filter graph. The graph would look like:
+                    # "[0:v]filter_def1[v1];[v1]filter_def2[v2];[v2]filter_def3[outv]"
+                    # where each filter_def is like "drawtext=text=...:x=...:y=..."
+                    # (without the input/output labels, those are added here).
+
+                    # Build the filter graph string
+                    filter_graph_parts = []
+                    input_label = "0:v" # Assuming video from first input
+                    final_output_label = input_label # Default if no filters
+
+                    for i, filter_definition_body in enumerate(overlay_filter_strings):
+                        output_label = f"v_out_{i+1}"
+                        filter_segment = f"[{input_label}]{filter_definition_body}[{output_label}]"
+                        filter_graph_parts.append(filter_segment)
+                        input_label = output_label # Chain to the next filter
+                        final_output_label = output_label
+
+                    if filter_graph_parts:
+                        full_filter_complex_str = ";".join(filter_graph_parts)
+                        print(f"Applying filter_complex graph: {full_filter_complex_str}")
+
+                        # In ffmpeg-python, you apply filter_complex and then map the output stream.
+                        # The video_stream here is an ffmpeg-python stream object.
+                        # Applying filter_complex usually involves providing all input streams.
+                        # For simplicity, if only one video stream is input to filter_complex:
+                        filtered_video_node = video_stream.filter_complex(full_filter_complex_str)
+
+                        # We need to select the correct output stream from filter_complex.
+                        # This assumes the last filter in the chain outputs to `final_output_label`.
+                        # And that ffmpeg-python makes this accessible via __getitem__ on the result of filter_complex.
+                        video_stream = filtered_video_node[final_output_label]
+                        # If the mock doesn't support __getitem__, this will need adjustment or the mock improved.
+                        # The current mock's __getattr__ returns a new node, so filter_complex call
+                        # already returns a new node. The __getitem__ is for named stream selection.
 
         # Output settings
         output_options = {

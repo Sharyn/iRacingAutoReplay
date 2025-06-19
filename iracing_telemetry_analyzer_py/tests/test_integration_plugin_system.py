@@ -7,6 +7,7 @@ from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
 from iracing_telemetry_analyzer_py.src.plugin_manager import PluginManager, OverlayPluginInterface, build_drawtext_filter
 from iracing_telemetry_analyzer_py.src.replay_data import OverlayData # For mock
 
+
 # --- Fixtures or Helper Classes ---
 
 @pytest.fixture

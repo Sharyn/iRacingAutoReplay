@@ -16,6 +16,7 @@ from typing import Optional, List, Dict, Any, Callable
 # For this task, a regular class with NotImplementedError is also fine.
 # Let's go with ABC and @abstractmethod for clarity of intent.
 
+
 class IRacingManagerInterface(ABC):
     """
     Interface for managing interactions with the iRacing simulation.

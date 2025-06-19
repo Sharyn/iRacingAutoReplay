@@ -4,7 +4,7 @@ import json
 from dataclasses import fields, asdict
 from datetime import datetime, timezone # Ensure timezone aware for comparison
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional # Added List, Optional for completeness from replay_data
 
 from iracing_telemetry_analyzer_py.src.replay_data import (
     OverlayData, CapturedVideoFile, Driver, RaceEvent, MessageState,

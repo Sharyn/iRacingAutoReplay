@@ -199,12 +199,15 @@ class PluginManager:
                     try:
                         plugin_instance = cls()
                         if plugin_instance.name in self._plugins:
-                            print(f"Warning: Duplicate plugin name '{plugin_instance.name}' found. Skipping {cls}.")
+                            print(
+                                f"Warning: Duplicate plugin name '{plugin_instance.name}' "
+                                f"(from module '{module_name}'). Skipping class '{cls.__name__}'."
+                            )
                         else:
                             self._plugins[plugin_instance.name] = plugin_instance
-                            print(f"Loaded plugin: {plugin_instance.name} from {module_name}")
+                            print(f"Loaded plugin: '{plugin_instance.name}' from module '{module_name}'.")
                     except Exception as e:
-                        print(f"Error instantiating plugin {name} from {module_name}: {e}")
+                        print(f"Error instantiating plugin '{name}' from module '{module_name}': {e}")
 
         print(f"Plugin loading complete. Found {len(self._plugins)} plugins.")
 
@@ -331,30 +334,34 @@ if __name__ == '__main__':
 
     available_plugins = plugin_manager.get_available_plugins()
     if not available_plugins:
-        print("No plugins loaded. Make sure 'simple_timestamp_overlay.py' exists in the 'plugins' directory.")
-        print("If running this directly, create the example plugin first.")
+        print(
+            "No plugins loaded. Ensure 'simple_timestamp_overlay.py' exists in the "
+            f"'{plugins_dir_path.name}' directory."
+        )
+        print("If running this script directly, the example plugin might not be created yet by the parent process.")
     else:
         print("\nAvailable plugins:")
         for plugin in available_plugins:
-            print(f"  - Name: {plugin.name}, Description: {plugin.description}")
+            print(f"  - Name: '{plugin.name}', Description: '{plugin.description}'")
 
-        # Try to set the example plugin as active (assuming it will be named "Simple Timestamp")
+        # Try to set the example plugin as active
         plugin_to_activate = "Simple Timestamp"
-        print(f"\nSetting active plugin to: '{plugin_to_activate}'...")
+        print(f"\nAttempting to set active plugin to: '{plugin_to_activate}'...")
         if plugin_manager.set_active_plugin(plugin_to_activate, mock_overlay_data):
-            print("Plugin activated successfully.")
+            print(f"Plugin '{plugin_to_activate}' activated successfully.")
 
-            print("\nGetting filter options for a few timestamps:")
+            print("\nGetting filter options for a few sample timestamps:")
             timestamps_to_test = [0.0, 10.5, 60.333]
-            video_w, video_h = 1920, 1080
+            video_width, video_height = 1920, 1080 # Example dimensions
             for ts in timestamps_to_test:
-                filters = plugin_manager.get_current_filters(ts, video_w, video_h)
-                print(f"  Timestamp {ts:.2f}s - Filters: {filters}")
+                filters = plugin_manager.get_current_filters(ts, video_width, video_height)
+                print(f"  Timestamp {ts:.2f}s (Video: {video_width}x{video_height}) - Filters: {filters}")
 
+            print("\nSimulating transcode completion signal to active plugin...")
             plugin_manager.signal_transcode_complete()
         else:
-            print(f"Failed to activate plugin: {plugin_to_activate}")
+            print(f"ERROR: Failed to activate plugin '{plugin_to_activate}'.")
 
-    print("\nPluginManager Demonstration finished.")
+    print("\nPluginManager demonstration finished.")
 
 ```

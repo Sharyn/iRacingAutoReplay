@@ -37,12 +37,9 @@ def mock_overlay_data() -> OverlayData:
     return OverlayData()
 
 @pytest.fixture
-def mock_plugin_manager(mock_app_settings: AppSettings, mock_overlay_data: OverlayData, tmp_path: Path) -> PluginManager:
+def mock_plugin_manager(mock_app_settings: AppSettings, mock_overlay_data: OverlayData) -> PluginManager:
     """Provides a PluginManager with the SimpleTimestampOverlay loaded and active."""
-    # Create a dummy plugins dir within tmp_path for this test's PluginManager
-    # to avoid interference with actual plugins dir if tests run in parallel or modify things.
-    # However, the SimpleTimestampOverlay plugin is in the main src/plugins.
-    # For this integration test, we want to test loading from the actual path.
+    # This fixture loads plugins from the actual 'src/plugins' directory.
 
     test_file_path = Path(__file__).resolve()
     project_pkg_root = test_file_path.parent.parent.parent # iracing_telemetry_analyzer_py/

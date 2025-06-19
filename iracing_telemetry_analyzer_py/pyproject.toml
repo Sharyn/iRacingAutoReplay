@@ -3,7 +3,7 @@ name = "iracing_telemetry_analyzer"
 version = "0.1.0"
 description = "iRacing Telemetry Analysis Tool"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
     {name = "Your Name", email = "you@example.com"},

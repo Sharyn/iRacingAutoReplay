@@ -5,6 +5,7 @@ Manages the application's overall state and notifies observers of changes.
 import enum
 from typing import List, Callable, Optional
 
+
 class AppStates(enum.Enum):
     """
     Defines the possible operational states of the application.
@@ -74,29 +75,37 @@ class AppStateManager:
                           new_state is the same as the current_state.
         """
         if not isinstance(new_state, AppStates):
-            # Or raise an error, depending on how strict we want to be.
-            print(f"Warning: Attempted to change state to an invalid type: {type(new_state)}. State not changed.")
+            # Or raise a TypeError, depending on desired strictness.
+            print(
+                f"Warning: Attempted to change state to an invalid type: {type(new_state)}. "
+                "State not changed."
+            )
             return
 
+        # If state and message are the same, and not forced, do nothing.
+        # This prevents redundant notifications if the state effectively hasn't changed.
+        # Consider if message changes alone (even if state is the same) should always notify.
+        # Current logic: if state is same, message must also be same for no notification, unless forced.
+        # A more granular check might be:
+        # if self._current_state == new_state and not force_notify: return # Ignores message change
         if self._current_state == new_state and self._last_message == message and not force_notify:
-            # If state and message are the same, and not forced, do nothing.
-            # (Consider if message changes should trigger notification even if state is same)
-            # For now, if state is same, message must also be same unless forced.
-            # A more granular check might be: if self._current_state == new_state and not force_notify: return
             return
 
         self._current_state = new_state
         self._last_message = message
 
         # Notify observers
-        # Iterate over a copy of the list in case an observer tries to unregister itself during notification
+        # Notify observers.
+        # Iterate over a copy of the list (list(self._observers)) in case an observer
+        # tries to register/unregister itself during the notification loop.
         for observer in list(self._observers):
             try:
                 observer(self._current_state, self._last_message)
             except Exception as e:
-                # Catching general exceptions from observer callbacks to prevent one bad observer
-                # from stopping others from being notified.
-                print(f"Error notifying observer {observer.__name__ if hasattr(observer, '__name__') else observer}: {e}")
+                # Catch general exceptions from observer callbacks to prevent one misbehaving observer
+                # from halting notifications for others.
+                observer_name = getattr(observer, '__name__', str(observer))
+                print(f"Error notifying observer '{observer_name}': {e}")
 
 
 if __name__ == '__main__':
@@ -115,45 +124,48 @@ if __name__ == '__main__':
 
     # Initialize the state manager
     state_manager = AppStateManager()
-    print(f"Initial state: {state_manager.current_state}")
+    print(f"Initial state: {state_manager.current_state} (Message: '{state_manager.last_message}')")
 
     # Register observers
     state_manager.register_observer(simple_observer)
     state_manager.register_observer(another_observer)
-    print("\nRegistered simple_observer and another_observer.")
+    print("\nRegistered: simple_observer, another_observer.")
 
     # Change state
     print("\nChanging state to ANALYZING_REPLAY...")
-    state_manager.change_state(AppStates.ANALYZING_REPLAY, "Starting to analyze replay file X.")
-    print(f"Current state after change: {state_manager.current_state}, Message: {state_manager.last_message}")
+    state_manager.change_state(AppStates.ANALYZING_REPLAY, "Starting analysis of 'replay.rpy'.")
+    print(f"Current state: {state_manager.current_state} (Message: '{state_manager.last_message}')")
 
     print("\nChanging state to CAPTURING_VIDEO (no message)...")
     state_manager.change_state(AppStates.CAPTURING_VIDEO)
-    print(f"Current state after change: {state_manager.current_state}")
+    print(f"Current state: {state_manager.current_state} (Message: '{state_manager.last_message}')")
 
-    print("\nAttempting to change to the same state (CAPTURING_VIDEO) without force_notify...")
-    state_manager.change_state(AppStates.CAPTURING_VIDEO) # Should not notify if state and message are unchanged
-    print(f"State remains: {state_manager.current_state} (Observers should not have been re-notified for this if message also same)")
+    print("\nAttempting to change to same state (CAPTURING_VIDEO) with no message (no force_notify)...")
+    state_manager.change_state(AppStates.CAPTURING_VIDEO) # Should not re-notify
+    print(f"State remains: {state_manager.current_state}")
+    print("  (Observers should not have been re-notified if message also same)")
 
-    print("\nAttempting to change to the same state (CAPTURING_VIDEO) but with a new message (and no force_notify)...")
-    state_manager.change_state(AppStates.CAPTURING_VIDEO, "Progress update: 50% captured.")
-    print(f"State: {state_manager.current_state}, Message: '{state_manager.last_message}' (Observers should be notified due to message change)")
+    print("\nAttempting to change to same state (CAPTURING_VIDEO) but with a new message...")
+    state_manager.change_state(AppStates.CAPTURING_VIDEO, "Capture progress: 50%")
+    print(f"State: {state_manager.current_state} (Message: '{state_manager.last_message}')")
+    print("  (Observers should be notified due to message change)")
 
-    print("\nAttempting to change to the same state (CAPTURING_VIDEO) with the same message, but with force_notify=True...")
-    state_manager.change_state(AppStates.CAPTURING_VIDEO, "Progress update: 50% captured.", force_notify=True)
-    print(f"State: {state_manager.current_state} (Observers should have been re-notified due to force_notify)")
+    print("\nAttempting to change to same state and message, but with force_notify=True...")
+    state_manager.change_state(AppStates.CAPTURING_VIDEO, "Capture progress: 50%", force_notify=True)
+    print(f"State: {state_manager.current_state} (Message: '{state_manager.last_message}')")
+    print("  (Observers should have been re-notified due to force_notify)")
 
     print("\nChanging state to ERROR...")
-    state_manager.change_state(AppStates.ERROR, "Failed to transcode video.")
-    print(f"Current state after error: {state_manager.current_state}")
+    state_manager.change_state(AppStates.ERROR, "Video transcoding failed: FFmpeg not found.")
+    print(f"Current state: {state_manager.current_state} (Message: '{state_manager.last_message}')")
 
     # Unregister an observer
     print("\nUnregistering simple_observer...")
     state_manager.unregister_observer(simple_observer)
 
     print("\nChanging state to IDLE (simple_observer should not be notified)...")
-    state_manager.change_state(AppStates.IDLE, "Process complete, returning to idle.")
-    print(f"Final state: {state_manager.current_state}")
+    state_manager.change_state(AppStates.IDLE, "Operations complete. System idle.")
+    print(f"Final state: {state_manager.current_state} (Message: '{state_manager.last_message}')")
 
-    print("\nDemonstration finished.")
+    print("\nAppStateManager demonstration finished.")
 ```

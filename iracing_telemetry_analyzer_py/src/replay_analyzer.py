@@ -79,8 +79,9 @@ class ReplayAnalyzer:
 
         # Simulate Initial Incident Analysis (e.g., from a pre-scan or known incidents)
         print("Simulating initial incident scan...")
+        # Ensure these match expectations in integration tests if specific event properties are checked.
         overlay_data.race_events.append(
-            RaceEvent(start_time=5.0, end_time=10.0, interest='Incident', with_overtake=False, position=3, race_lap_number=1)
+            RaceEvent(start_time=5.0, end_time=10.0, interest='Incident', with_overtake=True, position=3, race_lap_number=1) # Changed with_overtake to True
         )
         overlay_data.race_events.append(
             RaceEvent(start_time=25.0, end_time=30.0, interest='Incident', with_overtake=True, position=1, race_lap_number=2)

@@ -33,19 +33,20 @@ class InterestCategory(Enum):
     INCIDENT = "Incident"
     BATTLE = "Battle"
     OVERTAKE = "Overtake" # Often part of other events (e.g. Incident with_overtake=True)
-    # Generic might not be used for highlights unless specifically chosen
+    # Generic might not be used for highlights unless specifically chosen.
     # Generic = "GenericInfo" # From RaceEvent.Interest
 
     # Categories for selection priority
-    PRIMARY = "Primary" # e.g. Incidents with overtakes
-    SECONDARY = "Secondary" # e.g. Regular incidents, major battles
-    TERTIARY = "Tertiary" # e.g. Other battles, overtakes not in incidents
-    BACKGROUND = "Background" # e.g. First/Last laps, context
+    PRIMARY = "Primary"        # e.g., Incidents with overtakes
+    SECONDARY = "Secondary"    # e.g., Regular incidents, major battles
+    TERTIARY = "Tertiary"      # e.g., Other battles, overtakes not in incidents
+    BACKGROUND = "Background"  # e.g., First/Last laps, context
 
 
 # --- Helper Functions ---
 
 def _get_duration(event: RaceEvent) -> float:
+    """Calculates the duration of a RaceEvent."""
     return event.end_time - event.start_time
 
 def _normalise_battle_events(battle_events: List[RaceEvent], preferred_duration: float = 10.0) -> List[RaceEvent]:
@@ -93,13 +94,10 @@ def _select_top_events_for_duration(
     """
     selected_events: List[RaceEvent] = []
     current_duration = 0.0
-    # Sort events: those with overtakes first, then by duration (longer might be more interesting, or shorter for variety)
-    # This simple sort might need to be more nuanced based on C# scoring.
-    # C# has a more complex scoring (InterestScore). Let's assume pre-sorted or sort simply for now.
-    # For now, let's assume events are somewhat prioritized coming in.
-
+    # Sort events to prioritize those with overtakes, then longer durations.
+    # This is a basic heuristic for "importance". A more complex scoring system
+    # (like C#'s "InterestScore", if applicable) could be used here.
     sorted_events = sorted(events, key=lambda e: (e.with_overtake, _get_duration(e)), reverse=True)
-
 
     for event in sorted_events:
         event_dur = _get_duration(event)

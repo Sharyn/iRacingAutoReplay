@@ -39,7 +39,7 @@ def main():
     app_settings = AppSettings()
     app_state_manager = AppStateManager()
 
-    # Log initial state
+    # Log initial state (e.g., application started)
     app_state_manager.change_state(
         AppStates.IDLE,
         "Application initialized. All systems nominal.",

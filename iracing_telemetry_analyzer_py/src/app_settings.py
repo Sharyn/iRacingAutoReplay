@@ -4,11 +4,13 @@ from pathlib import Path
 
 # Placeholder for config directory and settings file name
 # In a real app, this might be determined using platform-specific logic
-# e.g., appdirs package or Path.home() / '.config' / 'AppName'
-CONFIG_DIR_NAME = "IracingReplayDirectorPy" # Subdirectory in user's Documents or home
+# e.g., using appdirs package or Path.home() / '.config' / 'AppName'
+CONFIG_DIR_NAME = "IracingReplayDirectorPy"  # Subdirectory in user's Documents or chosen app data location
 SETTINGS_FILE_NAME = "settings.ini"
 
-# Determine a default user-specific directory for working folder and settings
+# Determine a default user-specific directory for working folder and settings.
+# Note: Path.home() / "Documents" is common but might not be ideal for all OSes or non-desktop apps.
+# Consider platform-specific app data directories for broader compatibility if needed.
 DEFAULT_USER_DOCUMENTS_PATH = Path.home() / "Documents"
 DEFAULT_WORKING_FOLDER_BASE = DEFAULT_USER_DOCUMENTS_PATH / CONFIG_DIR_NAME
 DEFAULT_CONFIG_FILE_PATH = DEFAULT_WORKING_FOLDER_BASE / SETTINGS_FILE_NAME
@@ -17,31 +19,33 @@ DEFAULT_CONFIG_FILE_PATH = DEFAULT_WORKING_FOLDER_BASE / SETTINGS_FILE_NAME
 DEFAULT_SETTINGS = {
     # Section: General
     "General": {
-        "working_folder": str(DEFAULT_WORKING_FOLDER_BASE), # User's documents/IracingReplayDirectorPy
-        "last_video_file": "",
-        "plugin_name": "JockeOverlays",
-        "preferred_driver_names": "", # Comma-separated string
-        "track_cameras_config_path": "track_cameras.xml", # Placeholder, could be relative to working_folder or absolute
-        "use_new_settings_dialog": True, # Boolean
+        "working_folder": str(DEFAULT_WORKING_FOLDER_BASE),  # Default base for working directory
+        "last_video_file": "",                               # Path to the last video file processed or recorded
+        "plugin_name": "JockeOverlays",                      # Default overlay plugin
+        "preferred_driver_names": "",                        # Comma-separated string of preferred driver names
+        "track_cameras_config_path": "track_cameras.xml",    # Placeholder for track camera config file
+                                                             # (could be relative to working_folder or absolute)
+        "use_new_settings_dialog": True,                     # Boolean flag for UI features
     },
-    # Section: Recording
+    # Section: Recording (primarily for external recorder interactions)
     "Recording": {
-        "close_iracing_after_recording": False, # Boolean
-        "fast_video_recording": False, # Boolean - Placeholder, meaning might need clarification
-        "short_test_only": False, # Boolean
-        "hotkey_stop_start": "Ctrl+Shift+S",
-        "hotkey_pause_resume": "Ctrl+Shift+P",
+        "close_iracing_after_recording": False,  # Boolean: Attempt to close iRacing after recording
+        "fast_video_recording": False,           # Boolean: Placeholder for a 'fast recording' mode preset
+        "short_test_only": False,                # Boolean: Developer flag for shorter test runs
+        "hotkey_stop_start": "Ctrl+Shift+S",     # Default hotkey to signal start/stop to recorder
+        "hotkey_pause_resume": "Ctrl+Shift+P",   # Default hotkey to signal pause/resume to recorder
     },
-    # Section: Encoding
+    # Section: Encoding (video transcoding settings)
     "Encoding": {
-        "capture_opening_scene": True, # Boolean
-        "shutdown_pc_after_encoding": False, # Boolean
-        "encode_video_after_capture": True, # Boolean
-        "video_bitrate": 15000000, # Integer (15 Mbps)
-        "highlight_video_only": False, # Boolean
-        "highlight_video_target_duration_seconds": 120, # Integer
+        "capture_opening_scene": True,           # Boolean: Include opening scene in highlights
+        "shutdown_pc_after_encoding": False,     # Boolean: Shutdown PC after transcoding completes
+        "encode_video_after_capture": True,      # Boolean: Automatically start transcoding after capture/analysis
+        "video_bitrate": 15000000,               # Integer: Target video bitrate in bps (e.g., 15 Mbps)
+        "highlight_video_only": False,           # Boolean: Global default to only produce highlights
+        "highlight_video_target_duration_seconds": 120,  # Integer: Target duration for highlight reels
     }
 }
+
 
 class AppSettings:
     def __init__(self, settings_filepath=None):
@@ -94,22 +98,27 @@ class AppSettings:
                 expected_type = self._get_type(section, key)
                 try:
                     if expected_type == bool:
-                        # configparser's getboolean is robust
+                        # configparser's getboolean is robust for various string representations of bools
                         actual_value = parser.getboolean(section, key)
                     elif expected_type == int:
                         actual_value = parser.getint(section, key)
-                    elif expected_type == float: # Though no float defaults currently
+                    elif expected_type == float:  # Though no float defaults are currently defined
                         actual_value = parser.getfloat(section, key)
-                    else: # Assumed to be str
+                    else:  # Assumed to be str
                         actual_value = value_str
                     setattr(self, key, actual_value)
                 except ValueError as e:
-                    print(f"Warning: Could not convert setting '{key}' in section '{section}' to {expected_type.__name__}. Using default. Error: {e}")
+                    print(
+                        f"Warning: Could not convert setting '{key}' in section '{section}' "
+                        f"to type '{expected_type.__name__}'. Using default. Error: {e}"
+                    )
                     # Keep the default value already set in __init__
                 except configparser.NoOptionError:
-                     # This shouldn't happen if iterating parser.items(), but good for safety
-                    print(f"Warning: Setting '{key}' in section '{section}' not found. Using default.")
-
+                    # This shouldn't happen if iterating parser.items(), but included for safety
+                    print(
+                        f"Warning: Setting '{key}' in section '{section}' not found by configparser "
+                        f"during item iteration. Using default."
+                    )
 
     def save_settings(self):
         """
@@ -168,61 +177,54 @@ if __name__ == '__main__':
     settings = AppSettings()
 
     # Access settings
-    print(f"Working folder: {settings.working_folder}")
-    print(f"Video bitrate: {settings.video_bitrate}")
-    print(f"Shutdown PC after encoding: {settings.shutdown_pc_after_encoding}")
-    print(f"Preferred drivers: '{settings.preferred_driver_names}' (empty means none)")
+    print(f"  Working folder: {settings.working_folder}")
+    print(f"  Video bitrate: {settings.video_bitrate} bps")
+    print(f"  Shutdown PC after encoding: {settings.shutdown_pc_after_encoding}")
+    print(f"  Preferred drivers: '{settings.preferred_driver_names}' (empty means none)")
 
     # Modify a setting
+    print("\nModifying some settings in memory...")
     original_bitrate = settings.video_bitrate
-    settings.video_bitrate = 20000000 # 20 Mbps
+    settings.video_bitrate = 20000000  # 20 Mbps
     settings.preferred_driver_names = "Driver A, Driver B"
-    print(f"Changed video bitrate to: {settings.video_bitrate}")
-    print(f"Changed preferred drivers to: {settings.preferred_driver_names}")
+    print(f"  Changed video bitrate to: {settings.video_bitrate} bps")
+    print(f"  Changed preferred drivers to: '{settings.preferred_driver_names}'")
 
+    # Save settings back to a temporary file
+    # This avoids altering the user's actual settings file during this example run.
+    temp_settings_path = Path.cwd() / "temp_example_settings.ini"
+    # Temporarily change the filepath for this instance to save to temp file
+    original_filepath = settings.filepath
+    settings.filepath = temp_settings_path
+    print(f"\nSaving current settings to temporary file: {temp_settings_path}")
+    try:
+        settings.save_settings()  # Saves current state (including modifications) to temp_settings_path
+        print("  Settings saved to temporary file.")
+    except Exception as e:
+        print(f"  Error saving to temporary file: {e}")
 
-    # Save settings back to the file
-    # For this example, let's use a temporary file to avoid altering user's actual settings
-    temp_settings_path = Path.cwd() / "temp_settings.ini"
-    print(f"Saving current settings to: {temp_settings_path}")
-    settings.save_settings() # Saves current state (including modifications)
+    # Restore original filepath if needed for further operations on 'settings' instance
+    settings.filepath = original_filepath
 
     # Create a new instance, loading from the temp file to verify save/load
-    print(f"\nLoading settings from {temp_settings_path} into a new instance...")
-    settings_loaded = AppSettings(settings_filepath=temp_settings_path)
-    print(f"Loaded working folder: {settings_loaded.working_folder}") # Should be default from DEFAULT_SETTINGS
-    print(f"Loaded video bitrate: {settings_loaded.video_bitrate}") # Should be 20000000
-    print(f"Loaded preferred drivers: {settings_loaded.preferred_driver_names}") # Should be "Driver A, Driver B"
-    print(f"Loaded shutdown PC: {settings_loaded.shutdown_pc_after_encoding}") # Should be default
-
-    # Clean up the temporary file
     if temp_settings_path.exists():
-        # os.remove(temp_settings_path)
-        print(f"Temporary settings file {temp_settings_path} was created for testing.")
-        # Revert changes for next run if needed, by saving defaults
-        # settings.video_bitrate = original_bitrate
-        # settings.preferred_driver_names = ""
-        # settings.save_settings() # This would save back to DEFAULT_CONFIG_FILE_PATH if not careful
+        print(f"\nLoading settings from {temp_settings_path} into a new instance...")
+        settings_loaded = AppSettings(settings_filepath=temp_settings_path)
+        print(f"  Loaded working folder: {settings_loaded.working_folder}")
+        print(f"  Loaded video bitrate: {settings_loaded.video_bitrate} bps") # Should be 20000000
+        print(f"  Loaded preferred drivers: '{settings_loaded.preferred_driver_names}'") # Should be "Driver A, Driver B"
+        print(f"  Loaded shutdown PC: {settings_loaded.shutdown_pc_after_encoding}") # Should be default
 
-    print("\nTo test interaction with actual user settings file:")
-    print(f"1. Run once to potentially create '{DEFAULT_CONFIG_FILE_PATH}' with defaults or loaded values.")
-    print(f"2. Manually edit '{DEFAULT_CONFIG_FILE_PATH}'.")
-    print(f"3. Run again to see if your manual edits are loaded correctly.")
-
-    # Test case: what if a setting is removed from the file? It should revert to default.
-    # To test: save, manually delete a line from temp_settings.ini, then load.
-    if temp_settings_path.exists():
+        # Test case: what if a setting is removed from the file? It should revert to default.
         print(f"\nTesting resilience to missing option in INI file (using {temp_settings_path})...")
-        # Save current state (e.g., bitrate 20M)
-
-        # We need to use the save method of the settings_loaded instance,
-        # which is configured with temp_settings_path as its filepath.
-        settings_loaded.save_settings() # settings_loaded.filepath is temp_settings_path
+        # Save current state of settings_loaded (e.g., bitrate 20M) to temp_settings_path
+        settings_loaded.save_settings()
 
         # Read content, remove a line, write back
         with open(temp_settings_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
+        # Remove video_bitrate for testing
         modified_lines = [line for line in lines if not line.strip().startswith("video_bitrate")]
 
         with open(temp_settings_path, 'w', encoding='utf-8') as f:
@@ -230,19 +232,38 @@ if __name__ == '__main__':
         print(f"  Manually removed 'video_bitrate' from {temp_settings_path}")
 
         settings_after_delete = AppSettings(settings_filepath=temp_settings_path)
-        print(f"  Loaded video bitrate after delete: {settings_after_delete.video_bitrate} (should be default: {DEFAULT_SETTINGS['Encoding']['video_bitrate']})")
-        assert settings_after_delete.video_bitrate == DEFAULT_SETTINGS['Encoding']['video_bitrate']
+        expected_default_bitrate = DEFAULT_SETTINGS['Encoding']['video_bitrate']
+        print(
+            f"  Loaded video bitrate after delete: {settings_after_delete.video_bitrate} "
+            f"(should be default: {expected_default_bitrate})"
+        )
+        assert settings_after_delete.video_bitrate == expected_default_bitrate
 
         # Test reset_to_defaults
         print("\nTesting reset_to_defaults...")
+        # Change a setting in settings_after_delete
         settings_after_delete.plugin_name = "TEMPORARY_PLUGIN_NAME_FOR_RESET_TEST"
         assert settings_after_delete.plugin_name != DEFAULT_SETTINGS['General']['plugin_name']
-        settings_after_delete.reset_to_defaults()
-        assert settings_after_delete.plugin_name == DEFAULT_SETTINGS['General']['plugin_name']
-        assert settings_after_delete.video_bitrate == DEFAULT_SETTINGS['Encoding']['video_bitrate'] # Should be back to default
-        print("  reset_to_defaults appears to work.")
 
-        # Clean up
+        settings_after_delete.reset_to_defaults() # Reset to program defaults
+        assert settings_after_delete.plugin_name == DEFAULT_SETTINGS['General']['plugin_name']
+        assert settings_after_delete.video_bitrate == DEFAULT_SETTINGS['Encoding']['video_bitrate']
+        print("  reset_to_defaults appears to work: settings are back to program defaults.")
+
+        # Clean up the temporary file
+        try:
+            os.remove(temp_settings_path)
+            print(f"\nCleaned up temporary settings file: {temp_settings_path}")
+        except OSError as e:
+            print(f"\nError cleaning up temporary file {temp_settings_path}: {e}")
+
+    print("\n--- Interaction with actual user settings file ---")
+    print(f"The application uses settings from: {DEFAULT_CONFIG_FILE_PATH}")
+    print("1. Run the application once to potentially create this file with defaults or loaded values.")
+    print("2. Manually edit the file if you wish to change settings outside the app.")
+    print("3. Run the application again to see if your manual edits are loaded correctly.")
+
+    print("\nAppSettings module demonstration finished.")
         os.remove(temp_settings_path)
         print(f"  Cleaned up {temp_settings_path}")
 

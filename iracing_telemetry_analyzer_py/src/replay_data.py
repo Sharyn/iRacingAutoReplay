@@ -29,13 +29,17 @@ def _parse_bool(value_str: Optional[str]) -> bool:
     return value_str.lower() == 'true'
 
 def _datetime_from_isotsformat_z(dt_str: str) -> datetime:
-    # Handles ISO format, typically ending with 'Z' for UTC
-    # datetime.fromisoformat doesn't like 'Z' directly before Python 3.11
+    """
+    Converts an ISO format string, potentially ending with 'Z', to a datetime object.
+    The 'Z' (Zulu time) is replaced with '+00:00' for compatibility with
+    datetime.fromisoformat prior to Python 3.11.
+    """
     if dt_str.endswith('Z'):
         dt_str = dt_str[:-1] + '+00:00'
     return datetime.fromisoformat(dt_str)
 
 def _datetime_to_isotsformat_z(dt: datetime) -> str:
+    """Converts a datetime object to an ISO format string, replacing '+00:00' with 'Z'."""
     return dt.isoformat().replace('+00:00', 'Z')
 
 
@@ -82,45 +86,47 @@ class CapturedVideoFile:
 
 @dataclass
 class Driver:
-    car_number: str # In XML, usually an attribute of a parent or a specific tag like <CarNumber>
-    user_name: str  # Similar, e.g. <UserName>
-    position: Optional[int] = None # <Position>
-    pit_stop_count: int = 0 # <PitStopCount>
-    car_idx: Optional[int] = None # Not typically in XML, for runtime use
-    short_name: Optional[str] = None # Not typically in XML, for runtime use, or derived
+    car_number: str                 # In XML, usually <CarNumber> or an attribute.
+    user_name: str                  # E.g., <UserName>.
+    position: Optional[int] = None  # E.g., <Position>.
+    pit_stop_count: int = 0         # E.g., <PitStopCount>.
+    car_idx: Optional[int] = None   # Runtime data, not typically from XML.
+    short_name: Optional[str] = None # Runtime data or derived, not typically from XML.
 
-    # Note: In C#, Driver is often part of another class like LeaderBoardDriver, CamDriver etc.
-    # The XML structure will dictate how this is parsed. For now, assuming direct tags.
+    # Note: In C#, Driver is often part of another class (e.g., LeaderBoardDriver).
+    # The XML structure dictates parsing. This class assumes direct tags for now.
 
     @classmethod
     def from_xml(cls, element: ET.Element) -> 'Driver':
-        # This generic from_xml might need to be adapted based on how Driver is represented
-        # in different contexts (e.g. CamDriver's Driver vs LeaderBoard's Driver)
+        # This generic from_xml might need adaptation based on how Driver is
+        # represented in different XML contexts (e.g., CamDriver vs LeaderBoard).
         return cls(
             position=_parse_optional_int(_find_text(element, 'Position')),
-            car_number=_find_text(element, 'CarNumber', '0'), # Default to '0' if missing
-            user_name=_find_text(element, 'UserName', 'Unknown'), # Default if missing
+            car_number=_find_text(element, 'CarNumber', '0'),       # Default to '0' if missing.
+            user_name=_find_text(element, 'UserName', 'Unknown'), # Default if missing.
             pit_stop_count=_parse_optional_int(_find_text(element, 'PitStopCount')) or 0,
-            # car_idx and short_name are not expected from typical XML for this structure
+            # car_idx and short_name are not typically expected from this XML structure.
         )
 
     def to_xml(self, parent_element: ET.Element, element_name: str = "Driver"):
-        # Element name can be overridden e.g. for CamDriver's <CurrentDriver>
+        # Element name can be overridden (e.g., for CamDriver's <CurrentDriver>).
         el = ET.SubElement(parent_element, element_name)
-        _add_sub_element(el, 'Position', self.position, include_if_none=True) # Often included even if null/empty in C# XML
+        # Position is often included even if null/empty in C# XML serializations.
+        _add_sub_element(el, 'Position', self.position, include_if_none=True)
         _add_sub_element(el, 'CarNumber', self.car_number)
         _add_sub_element(el, 'UserName', self.user_name)
         _add_sub_element(el, 'PitStopCount', self.pit_stop_count)
-        # car_idx and short_name are not typically serialized for this structure
+        # car_idx and short_name are not typically serialized for this structure.
+
 
 @dataclass
 class RaceEvent:
-    start_time: float # <StartTime>
-    end_time: float   # <EndTime>
-    interest: str     # <Interest> (enum-like: "Incident", "Overtake", "Battle")
-    with_overtake: bool # <WithOvertake>
-    position: int = 9999  # <Position>
-    race_lap_number: int = 0 # <RaceLapNumber>
+    start_time: float        # XML: <StartTime>
+    end_time: float          # XML: <EndTime>
+    interest: str            # XML: <Interest> (enum-like: "Incident", "Overtake", "Battle")
+    with_overtake: bool      # XML: <WithOvertake>
+    position: int = 9999     # XML: <Position>
+    race_lap_number: int = 0 # XML: <RaceLapNumber>
 
     @classmethod
     def from_xml(cls, element: ET.Element) -> 'RaceEvent':
@@ -193,10 +199,10 @@ class CamDriver:
 
 @dataclass
 class LeaderBoardSnapshot: # Renamed from LeaderBoard
-    start_time: float # <StartTime>
-    drivers: List[Driver] = field(default_factory=list) # <Drivers><Driver>...</Driver>...</Drivers>
-    race_position: str = "" # <RacePosition> (seems like a summary string)
-    lap_counter: str = "" # <LapCounter> (e.g. "Lap 1/10")
+    start_time: float                             # XML: <StartTime>
+    drivers: List[Driver] = field(default_factory=list) # XML: <Drivers><Driver>...</Driver>...</Drivers>
+    race_position: str = ""                       # XML: <RacePosition> (summary string, e.g., "P1")
+    lap_counter: str = ""                         # XML: <LapCounter> (e.g., "Lap 1/10")
 
     @classmethod
     def from_xml(cls, element: ET.Element) -> 'LeaderBoardSnapshot':
@@ -223,9 +229,9 @@ class LeaderBoardSnapshot: # Renamed from LeaderBoard
 
 @dataclass
 class FastLap:
-    start_time: float # C# was long StartTime, assuming float seconds consistent with others
-    driver: Driver    # <Driver> (uses Driver class)
-    lap_time: float   # C# was Time LapTime, assuming float seconds
+    start_time: float  # C# `long StartTime` (ticks/ms); here float seconds for consistency.
+    driver: Driver     # XML: <Driver>
+    lap_time: float    # C# `Time LapTime` (TimeSpan); here float seconds.
 
     @classmethod
     def from_xml(cls, element: ET.Element) -> 'FastLap':
@@ -247,16 +253,16 @@ class FastLap:
 
 @dataclass
 class OverlayData:
-    overlay_datetime: datetime = field(default_factory=datetime.utcnow) # <DateTime>
-    leader_boards: List[LeaderBoardSnapshot] = field(default_factory=list) # <LeaderBoards><LeaderBoard>...</LeaderBoard>...</LeaderBoards>
-    cam_drivers: List[CamDriver] = field(default_factory=list)
-    fastest_laps: List[FastLap] = field(default_factory=list)
-    message_states: List[MessageState] = field(default_factory=list)
-    session_data_xml: Optional[str] = None # <SessionData> (inner XML string)
-    race_events: List[RaceEvent] = field(default_factory=list)
-    time_for_outro_overlay: Optional[float] = None # <TimeForOutroOverlay>
-    video_files: List[CapturedVideoFile] = field(default_factory=list)
-    captured_version: Optional[str] = None # <CapturedVersion>
+    overlay_datetime: datetime = field(default_factory=datetime.utcnow)  # XML: <DateTime>
+    leader_boards: List[LeaderBoardSnapshot] = field(default_factory=list) # XML: <LeaderBoards><LeaderBoard>...
+    cam_drivers: List[CamDriver] = field(default_factory=list)            # XML: <CamDrivers><CamDriver>...
+    fastest_laps: List[FastLap] = field(default_factory=list)             # XML: <FastestLaps><FastLap>...
+    message_states: List[MessageState] = field(default_factory=list)      # XML: <MessageStates><MessageState>...
+    session_data_xml: Optional[str] = None      # XML: <SessionData> (stores inner XML string)
+    race_events: List[RaceEvent] = field(default_factory=list)            # XML: <RaceEvents><RaceEvent>...
+    time_for_outro_overlay: Optional[float] = None # XML: <TimeForOutroOverlay>
+    video_files: List[CapturedVideoFile] = field(default_factory=list)    # XML: <VideoFiles><CapturedVideoFile>...
+    captured_version: Optional[str] = None      # XML: <CapturedVersion>
 
     @classmethod
     def load_from_xml(cls, filepath: str) -> 'OverlayData':
@@ -285,17 +291,23 @@ class OverlayData:
         session_data_el = root.find('SessionData')
         raw_session_data_xml = None
         if session_data_el is not None:
-            # Serialize the children of SessionData element to string
-            # This captures everything inside <SessionData>...</SessionData>
-            children_xml_parts = []
-            if session_data_el.text: # Text before first child
-                 children_xml_parts.append(session_data_el.text)
-            for child in session_data_el:
-                children_xml_parts.append(ET.tostring(child, encoding='unicode'))
-            raw_session_data_xml = "".join(children_xml_parts).strip()
-            if not raw_session_data_xml: # If only text content
-                raw_session_data_xml = session_data_el.text
-
+            # This captures everything inside <SessionData>...</SessionData> as a string.
+            # It aims to reconstruct the inner XML, including mixed content.
+            inner_xml_parts = []
+            if session_data_el.text and session_data_el.text.strip():
+                inner_xml_parts.append(session_data_el.text.strip())
+            for child_el in session_data_el:
+                inner_xml_parts.append(ET.tostring(child_el, encoding='unicode'))
+                if child_el.tail and child_el.tail.strip():
+                    inner_xml_parts.append(child_el.tail.strip())
+            raw_session_data_xml = "".join(inner_xml_parts) if inner_xml_parts else None
+            # If only text content and no children, this might miss it.
+            # A simpler alternative if only text or only children:
+            # raw_session_data_xml = session_data_el.text or ET.tostring(session_data_el[0], encoding='unicode') etc.
+            # The current loop is more general for mixed.
+            # If after all this, it's empty, it might mean <SessionData/> was empty or only whitespace.
+            if raw_session_data_xml == "" and session_data_el.text is not None: # Check if it was just whitespace
+                 raw_session_data_xml = session_data_el.text # Preserve whitespace if it was the only content.
 
         return cls(
             overlay_datetime=overlay_dt,
@@ -318,57 +330,42 @@ class OverlayData:
         _add_sub_element(root, 'CapturedVersion', self.captured_version)
 
         if self.session_data_xml:
-            # If SessionData is already well-formed XML, parse it and append its root.
-            # Otherwise, treat as string content. For safety, could wrap in CDATA.
-            # Current C# seems to put it directly as child elements of <SessionData>
-            session_data_parent_el = ET.SubElement(root, 'SessionData')
-            try:
-                # Attempt to parse the stored XML string and append its children
-                # This assumes session_data_xml is a string containing one or more XML elements
-                # A wrapper element might be needed if session_data_xml has multiple roots or just text
-                # For now, let's assume it's a single root element's content or simple text.
-                # A robust way would be to parse it and append its children.
-                # If it's literally the content *between* <SessionData> tags:
-                # session_data_parent_el.append(ET.fromstring(f"<root_wrapper>{self.session_data_xml}</root_wrapper>"))
-                # This is tricky without knowing exact structure of session_data_xml.
-                # A simpler approach is to just set it as text, possibly wrapped in CDATA
-                # Check if it looks like XML
-                if self.session_data_xml.strip().startswith("<") and self.session_data_xml.strip().endswith(">"):
-                     # It's XML, try to parse and append. This is the complex part.
-                     # The C# code likely uses XmlWriter which handles this seamlessly.
-                     # ET is more manual. A common way is to parse the string and append elements.
-                     # For now, let's do a simplified version: add it as text.
-                     # If it's actual complex XML, it should be parsed and elements added.
-                     # This might require a dummy root if session_data_xml itself is not a single element.
-                    try:
-                        # Try to parse the XML string and append its root element
-                        # This assumes self.session_data_xml is a string representing a single XML element
-                        # or multiple sibling elements (which is not valid for ET.fromstring directly without a wrapper)
-                        # For now, if it's complex, this simple text dump will not be identical to C#
-                        # A proper solution would be to parse session_data_xml and append its elements.
-                        # For this subtask, "store the inner XML content as a string" implies we might not need to fully re-serialize its structure.
-                        # If the C# version stores <SessionData><ActualIracingData>...</ActualIracingData></SessionData>
-                        # then self.session_data_xml would be "<ActualIracingData>...</ActualIracingData>"
-                        # and we can do:
-                        session_data_content_el = ET.fromstring(self.session_data_xml)
-                        session_data_parent_el.append(session_data_content_el)
-                    except ET.ParseError:
-                        # If it's not a single root element, or invalid XML, store as text (CDATA might be good)
-                        # To mimic C#'s output which might not use CDATA for this specific field if it writes raw.
-                        session_data_parent_el.text = self.session_data_xml # Fallback
-                else:
-                    # Simple text content, or if parsing failed.
-                    session_data_parent_el.text = self.session_data_xml # XML special chars will be escaped.
-            except ET.ParseError:
-                # If self.session_data_xml is not a single well-formed XML element string,
-                # store it as plain text content. XML special characters will be escaped.
-                session_data_parent_el.text = self.session_data_xml
-            except Exception as e: # Broad catch for other XML manipulation issues
-                 session_data_parent_el.text = f"Error processing SessionData for XML output: {e}"
-        elif self.session_data_xml is None and ET.SubElement(root, 'SessionData') is not None:
-            # If it's None, create an empty SessionData tag if desired by C# structure
-            pass
+            # If SessionData is already well-formed XML, try to parse and append its root.
+            # Otherwise, treat as string content. C# might put it directly as child elements.
+            session_data_el = ET.SubElement(root, 'SessionData')
+            # The goal is to store self.session_data_xml as the "inner XML" of session_data_el.
+            # If self.session_data_xml is a string that represents valid XML elements,
+            # and we want them to be actual child elements in the output XML (not escaped text),
+            # we need to parse it and append.
+            # However, if session_data_xml contains mixed content (text and elements at the root level),
+            # parsing with ET.fromstring requires a single root element in the string.
 
+            # Current logic from previous step:
+            # Tries to parse if it looks like XML, otherwise sets as text.
+            # This is generally reasonable for "store inner XML as string".
+            is_likely_xml = (self.session_data_xml.strip().startswith("<") and
+                             self.session_data_xml.strip().endswith(">"))
+
+            if is_likely_xml:
+                try:
+                    # Attempt to parse self.session_data_xml.
+                    # This requires self.session_data_xml to be a single well-formed XML element string.
+                    # E.g., "<ActualData><Value>1</Value></ActualData>"
+                    # If it's like "<Elem1/><Elem2/>" (multiple roots) or "Text<Elem1/>", fromstring fails.
+                    parsed_content = ET.fromstring(self.session_data_xml)
+                    session_data_el.append(parsed_content)
+                except ET.ParseError:
+                    # If parsing fails (e.g., multiple roots, mixed content not wrapped in a single root,
+                    # or just not well-formed XML), store as text.
+                    # This will XML-escape the content.
+                    session_data_el.text = self.session_data_xml
+            else:
+                # Not XML-like, or parsing failed; store as text.
+                session_data_el.text = self.session_data_xml
+        elif self.session_data_xml is None:
+            # If session_data_xml is None, create an empty <SessionData /> tag.
+            # This is achieved by ET.SubElement(root, 'SessionData') and doing nothing else with it.
+            ET.SubElement(root, 'SessionData')
 
         # Helper to add list of complex objects
         def _add_list_elements(parent_el_tag, items_list):
@@ -495,59 +492,76 @@ if __name__ == '__main__':
     print(f"--- Loading data from {dummy_xml_filepath} ---")
     overlay_data = OverlayData.load_from_xml(dummy_xml_filepath)
 
-    if overlay_data and overlay_data.leader_boards:
+    if overlay_data and overlay_data.leader_boards: # Check if loading was successful
         print(f"Loaded OverlayData from: {overlay_data.overlay_datetime}")
-        print(f"Captured Version: {overlay_data.captured_version}")
-        print(f"Number of LeaderBoardSnapshots: {len(overlay_data.leader_boards)}")
+        print(f"  Captured Version: {overlay_data.captured_version}")
+        print(f"  Number of LeaderBoardSnapshots: {len(overlay_data.leader_boards)}")
         if overlay_data.leader_boards:
             first_lb = overlay_data.leader_boards[0]
-            print(f"  First LeaderBoard Snapshot time: {first_lb.start_time}, Lap: {first_lb.lap_counter}")
+            print(f"    First LeaderBoard Snapshot time: {first_lb.start_time}, Lap: {first_lb.lap_counter}")
             if first_lb.drivers:
-                print(f"    First driver in first LeaderBoard: {first_lb.drivers[0].user_name} (Car #{first_lb.drivers[0].car_number})")
+                print(
+                    f"      First driver: {first_lb.drivers[0].user_name} "
+                    f"(Car #{first_lb.drivers[0].car_number})"
+                )
 
-        print(f"Number of CamDriver entries: {len(overlay_data.cam_drivers)}")
+        print(f"  Number of CamDriver entries: {len(overlay_data.cam_drivers)}")
         if overlay_data.cam_drivers:
-             print(f"  First CamDriver target: {overlay_data.cam_drivers[0].current_driver.user_name}")
+             print(f"    First CamDriver target: {overlay_data.cam_drivers[0].current_driver.user_name}")
 
-        print(f"Number of FastestLap entries: {len(overlay_data.fastest_laps)}")
+        print(f"  Number of FastestLap entries: {len(overlay_data.fastest_laps)}")
         if overlay_data.fastest_laps:
-            print(f"  First FastestLap by: {overlay_data.fastest_laps[0].driver.user_name}, Time: {overlay_data.fastest_laps[0].lap_time}")
+            print(
+                f"    First FastestLap by: {overlay_data.fastest_laps[0].driver.user_name}, "
+                f"Time: {overlay_data.fastest_laps[0].lap_time}"
+            )
 
-        print(f"Number of MessageState entries: {len(overlay_data.message_states)}")
+        print(f"  Number of MessageState entries: {len(overlay_data.message_states)}")
         if overlay_data.message_states and overlay_data.message_states[0].messages:
-            print(f"  First message in first MessageState: '{overlay_data.message_states[0].messages[0]}'")
+            print(f"    First message: '{overlay_data.message_states[0].messages[0]}'")
 
-        print(f"SessionData XML: \n{overlay_data.session_data_xml}")
+        print(f"  SessionData XML snippet: \n    {str(overlay_data.session_data_xml)[:100]}...") # Print snippet
 
-        print(f"Number of RaceEvents: {len(overlay_data.race_events)}")
+        print(f"  Number of RaceEvents: {len(overlay_data.race_events)}")
         if overlay_data.race_events:
-            print(f"  First RaceEvent interest: {overlay_data.race_events[0].interest} at {overlay_data.race_events[0].start_time}s")
+            print(
+                f"    First RaceEvent interest: {overlay_data.race_events[0].interest} "
+                f"at {overlay_data.race_events[0].start_time}s"
+            )
 
-        print(f"TimeForOutroOverlay: {overlay_data.time_for_outro_overlay}")
-        print(f"Number of VideoFiles: {len(overlay_data.video_files)}")
+        print(f"  TimeForOutroOverlay: {overlay_data.time_for_outro_overlay}")
+        print(f"  Number of VideoFiles: {len(overlay_data.video_files)}")
         if overlay_data.video_files:
-            print(f"  First VideoFile: {overlay_data.video_files[0].filename} (IsIntro: {overlay_data.video_files[0].is_intro_video})")
+            print(
+                f"    First VideoFile: {overlay_data.video_files[0].filename} "
+                f"(IsIntro: {overlay_data.video_files[0].is_intro_video})"
+            )
 
         # --- Saving data ---
-        saved_xml_filepath = "saved_replay_data.xml"
-        print(f"\n--- Saving data to {saved_xml_filepath} ---")
+        saved_xml_filepath = "dummy_replay_data_saved.xml" # Changed name to avoid overwrite if error
+        print(f"\n--- Saving loaded data to {saved_xml_filepath} ---")
         overlay_data.save_to_xml(saved_xml_filepath)
-        print(f"Data saved to {saved_xml_filepath}. Check its content.")
+        print(f"  Data saved to {saved_xml_filepath}.")
 
-        saved_json_filepath = "saved_replay_data.json"
-        print(f"\n--- Saving data to {saved_json_filepath} ---")
+        saved_json_filepath = "dummy_replay_data_saved.json"
+        print(f"\n--- Saving loaded data to {saved_json_filepath} ---")
         overlay_data.save_to_json(saved_json_filepath)
-        print(f"Data saved to {saved_json_filepath}. Check its content.")
+        print(f"  Data saved to {saved_json_filepath}.")
 
-        # --- Test loading the saved XML ---
-        print(f"\n--- Loading data from {saved_xml_filepath} (the one we just saved) ---")
+        # --- Test loading the just-saved XML ---
+        print(f"\n--- Reloading data from {saved_xml_filepath} ---")
         reloaded_data = OverlayData.load_from_xml(saved_xml_filepath)
         if reloaded_data and reloaded_data.leader_boards:
-             print(f"Successfully reloaded. First driver in first reloaded LeaderBoard: {reloaded_data.leader_boards[0].drivers[0].user_name}")
-             assert reloaded_data.leader_boards[0].drivers[0].user_name == overlay_data.leader_boards[0].drivers[0].user_name
-
+             print(
+                 f"  Successfully reloaded. First driver in reloaded LeaderBoard: "
+                 f"{reloaded_data.leader_boards[0].drivers[0].user_name}"
+            )
+             assert reloaded_data.leader_boards[0].drivers[0].user_name == \
+                    overlay_data.leader_boards[0].drivers[0].user_name
+        else:
+            print("  Failed to reload the saved XML data or it was empty.")
     else:
-        print("Failed to load or parse OverlayData correctly.")
+        print("Failed to load or parse initial DUMMY_XML_CONTENT correctly.")
 
     print("\nreplay_data.py demonstration finished.")
 
