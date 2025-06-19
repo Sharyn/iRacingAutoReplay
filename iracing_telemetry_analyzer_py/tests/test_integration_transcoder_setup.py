@@ -248,4 +248,4 @@ def test_transcode_highlights_video_setup(
     t_index = cmd_args.index("-t") + 1
     assert t_index < len(cmd_args)
     assert abs(float(cmd_args[t_index]) - first_segment.duration) < 0.01
-```
+

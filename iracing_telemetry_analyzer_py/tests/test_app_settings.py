@@ -212,4 +212,4 @@ def test_settings_file_created_in_default_location_if_none_passed(tmp_path, monk
     assert parser.get("General", "plugin_name") == "SavedToMockDefault"
 
     # Clean up if necessary (tmp_path handles it)
-```
+

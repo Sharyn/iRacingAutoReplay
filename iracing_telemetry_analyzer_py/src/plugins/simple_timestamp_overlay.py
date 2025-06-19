@@ -122,4 +122,4 @@ class SimpleTimestampOverlay(OverlayPluginInterface):
 
 # To make this plugin discoverable, it must be a class implementing OverlayPluginInterface.
 # The PluginManager will instantiate it.
-```
+

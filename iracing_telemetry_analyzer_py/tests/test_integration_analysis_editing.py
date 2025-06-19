@@ -180,4 +180,4 @@ def test_analyze_replays_and_generate_highlight_edits(mock_app_settings: AppSett
 
     # Cleanup of the generated XML file is handled by tmp_path if it's under mock_app_settings.working_folder
     # which it is.
-```
+

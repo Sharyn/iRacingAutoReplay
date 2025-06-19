@@ -1665,4 +1665,4 @@ def test_analyzer_fastest_lap_new_lap_detection(
     assert driver_a_lb_data is not None
     assert driver_a_lb_data.best_lap_time == pytest.approx(89.0)
     assert driver_a_lb_data.last_lap_time == pytest.approx(89.0)
-```
+

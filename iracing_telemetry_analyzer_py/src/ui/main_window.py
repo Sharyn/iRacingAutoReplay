@@ -742,4 +742,4 @@ class MainWindow(QMainWindow):
 
         super().closeEvent(event)
 
-```
+

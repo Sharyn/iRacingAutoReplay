@@ -168,4 +168,4 @@ if __name__ == '__main__':
     print(f"Final state: {state_manager.current_state} (Message: '{state_manager.last_message}')")
 
     print("\nAppStateManager demonstration finished.")
-```
+

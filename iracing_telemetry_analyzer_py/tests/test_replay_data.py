@@ -259,4 +259,4 @@ def test_parsing_helpers_robustness():
     assert _parse_bool("yes") is False # Not handled by current _parse_bool, only 'true' variants
                                       # The C# version might handle 'Yes'/'No'. This is a difference if so.
                                       # ReplayData _parse_bool only considers 'true'. This is fine if consistent.
-```
+
