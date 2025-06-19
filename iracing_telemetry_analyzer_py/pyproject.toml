@@ -13,9 +13,9 @@ maintainers = [
 ]
 
 dependencies = [
-    "python-iracing-sdk-placeholder", # Placeholder for iRacing SDK
+    "pyirsdk",                        # For iRacing SDK interaction
     "PyQt6",                          # For the GUI
-    # configparser is part of the standard library, listed here for clarity
+    # configparser is part of the standard library
 ]
 
 [project.optional-dependencies]

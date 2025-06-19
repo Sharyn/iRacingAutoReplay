@@ -43,6 +43,11 @@ DEFAULT_SETTINGS = {
         "video_bitrate": 15000000,               # Integer: Target video bitrate in bps (e.g., 15 Mbps)
         "highlight_video_only": False,           # Boolean: Global default to only produce highlights
         "highlight_video_target_duration_seconds": 120,  # Integer: Target duration for highlight reels
+    },
+    # Section: Analysis
+    "Analysis": {
+        "analysis_replay_speed": 16,             # Integer: Replay speed during analysis phase (1x, 2x, 4x, 8x, 16x)
+        "max_analysis_duration_seconds": 600,    # Integer: Max seconds of replay time to analyze
     }
 }
 

@@ -14,7 +14,7 @@ try:
     from app_settings import AppSettings
     from app_state_manager import AppStateManager, AppStates
     from ui.main_window import MainWindow
-    from iracing_manager import PlaceholderIRacingManager # Using placeholder for now
+    from pyirsdk_manager import PyIrSdkManager, PYIRSDK_AVAILABLE # Changed to PyIrSdkManager
     from video_capture_manager import VideoCaptureManager
     from replay_analyzer import ReplayAnalyzer
     from ffmpeg_transcoder import FFmpegTranscoder
@@ -76,8 +76,8 @@ def main():
 
 
     # 3. Initialize Backend Managers (Service Locators or similar)
-    # Using PlaceholderIRacingManager as the actual SDK interaction is not part of this scope
-    iracing_manager = PlaceholderIRacingManager()
+    # Use PyIrSdkManager
+    iracing_manager = PyIrSdkManager()
 
     video_capture_manager = VideoCaptureManager(settings=app_settings) # Pass settings
 
@@ -92,24 +92,41 @@ def main():
     )
 
     # 4. Initialize and Show Main Window
-    # Pass all necessary backend components to the MainWindow
     main_window = MainWindow(
         app_settings=app_settings,
         app_state_manager=app_state_manager,
         plugin_manager=plugin_manager,
         replay_analyzer=replay_analyzer,
         ffmpeg_transcoder=ffmpeg_transcoder,
-        video_capture_manager=video_capture_manager
-        # Pass other managers as needed by UI actions
+        video_capture_manager=video_capture_manager,
+        iracing_manager=iracing_manager # Pass the actual iracing_manager
     )
 
-    # The MainWindow's __init__ already registers its _update_ui_from_state
-    # with the app_state_manager.
+    # Attempt initial connection to iRacing
+    print("Attempting initial connection to iRacing SDK...")
+    iracing_manager.connect()
+    # Initial status update based on connection attempt
+    if iracing_manager.is_connected():
+        app_state_manager.change_state(AppStates.IDLE, "Successfully connected to iRacing.", force_notify=True)
+    else:
+        status_msg = "Failed to connect to iRacing."
+        if not PYIRSDK_AVAILABLE:
+            status_msg += " (pyirsdk library not found/mocked)"
+        else:
+            status_msg += " (iRacing not running or SDK not active)"
+        app_state_manager.change_state(AppStates.IDLE, status_msg, force_notify=True)
+
 
     main_window.show()
 
     # 5. Start Qt Event Loop
-    sys.exit(app.exec())
+    exit_code = app.exec()
+
+    # Ensure disconnection when application is closing
+    print("Application closing, disconnecting from iRacing SDK...")
+    iracing_manager.disconnect()
+
+    sys.exit(exit_code)
 
 
 if __name__ == '__main__':

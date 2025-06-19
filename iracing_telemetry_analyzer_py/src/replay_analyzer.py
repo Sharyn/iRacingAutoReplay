@@ -10,6 +10,7 @@ from typing import Optional, Callable, TYPE_CHECKING
 if TYPE_CHECKING:
     from .iracing_manager import IRacingManagerInterface
     from .app_settings import AppSettings
+from .utils import dict_to_xml_string # Import the new utility
 
 from .replay_data import (
     OverlayData,
@@ -68,90 +69,197 @@ class ReplayAnalyzer:
             print(f"Error ensuring working folder {working_dir} exists: {e}")
             return None # Cannot proceed without a working folder
 
-        print("Focusing iRacing window (simulated)...")
-        self.iracing_manager.focus_iracing_window() # Placeholder call
+        print("Focusing iRacing window...")
+        self.iracing_manager.focus_iracing_window()
 
-        # Simulate Finding Race Start
-        race_start_frame_number = 0  # Assuming race starts at frame 0 for now
-        # race_start_session_time = 0.0 # Corresponding session time
-        print(f"Moving replay to simulated race start (frame {race_start_frame_number})...")
-        self.iracing_manager.replay_move_to_frame(race_start_frame_number) # Placeholder
+        print("Waiting for iRacing to start/connect...")
+        if not self.iracing_manager.is_connected(): # Try to connect if not already
+            self.iracing_manager.connect()
 
-        # Simulate Initial Incident Analysis (e.g., from a pre-scan or known incidents)
-        print("Simulating initial incident scan...")
-        # Ensure these match expectations in integration tests if specific event properties are checked.
-        overlay_data.race_events.append(
-            RaceEvent(start_time=5.0, end_time=10.0, interest='Incident', with_overtake=True, position=3, race_lap_number=1) # Changed with_overtake to True
-        )
-        overlay_data.race_events.append(
-            RaceEvent(start_time=25.0, end_time=30.0, interest='Incident', with_overtake=True, position=1, race_lap_number=2)
-        )
+        # Use wait_for_iracing_to_start for initial connection robustness
+        started = self.iracing_manager.wait_for_iracing_to_start(abort_check)
+        if not started:
+            print("ERROR: iRacing did not start or connection failed. Aborting analysis.")
+            # Ensure replay speed is reset if it was somehow set
+            if hasattr(self.iracing_manager, 'replay_set_speed'): # Check if method exists
+                self.iracing_manager.replay_set_speed(1) # Set to normal speed as a fallback
+            return None
 
-        # Race Situation Analysis Loop (Simulated Data Feed)
-        print("Starting simulated race situation analysis loop...")
-        # self.iracing_manager.replay_set_speed(16) # Conceptually, speed up replay
+        # For now, assume race start is frame 0 / time 0.
+        # TODO: Implement logic to find actual green flag and rewind replay.
+        race_start_frame_number = 0
+        # race_start_session_time = 0.0 # Not strictly used yet if we just go to frame 0
+        print(f"Moving replay to defined race start (frame {race_start_frame_number})...")
+        self.iracing_manager.replay_move_to_frame(race_start_frame_number)
+        time.sleep(0.5) # Give iRacing a moment to seek
 
-        simulated_duration_seconds = 100 # Virtual seconds for the loop
-        samples_per_virtual_second = 2 # How many data points to generate per virtual second
+        # Get initial session data
+        session_info_dict = self.iracing_manager.get_session_data()
+        if session_info_dict:
+            try:
+                overlay_data.session_data_xml = dict_to_xml_string(session_info_dict, 'SessionInfo')
+                # Log some basic info from session data
+                track_name = session_info_dict.get('WeekendInfo', {}).get('TrackDisplayName', 'N/A')
+                print(f"Track found in SessionInfo: {track_name}")
+                race_session = next((s for s in session_info_dict.get('SessionInfo', {}).get('Sessions', []) if s.get('SessionType') == 'Race'), None)
+                if race_session:
+                    print(f"Race session found (SessionNum: {race_session.get('SessionNum')}). Official: {race_session.get('ResultsOfficial', False)}")
+            except Exception as e:
+                print(f"Error processing session_info_dict for XML conversion: {e}")
+                overlay_data.session_data_xml = f"<ErrorProcessingSessionData>{e}</ErrorProcessingSessionData>"
+        else:
+            print("Warning: Could not retrieve session data from iRacing manager.")
+            overlay_data.session_data_xml = "<SessionInfoNotFound />"
 
-        current_sample_time = 0.0
-        for i in range(simulated_duration_seconds * samples_per_virtual_second):
+
+        # Main Data Loop (Using SDK Data)
+        analysis_speed = getattr(self.settings, 'analysis_replay_speed', 16)
+        max_replay_time_to_analyze = getattr(self.settings, 'max_analysis_duration_seconds', 600)
+
+        print(f"Starting main data analysis loop. Replay speed: {analysis_speed}x. Max analysis duration: {max_replay_time_to_analyze}s.")
+        if not self.iracing_manager.is_replay_playing(): # Ensure replay is playing
+             self.iracing_manager.replay_set_speed(analysis_speed)
+
+        last_session_time = -1.0
+        no_new_data_timeout_seconds = 15
+        last_data_received_monotonic_time = time.monotonic()
+        incident_check_interval_seconds = 2.0 # How often to check for incidents (session time)
+        last_incident_check_session_time = -1.0
+
+        loop_iterations = 0
+        # Heuristic for max_loop_iterations: if analyzing 10 min (600s) at 60fps data rate
+        # this is 36000 data points. If replay is 16x, this is 36000/16 actual loop iterations.
+        # Add a safety margin.
+        max_loop_iterations = (max_replay_time_to_analyze * 60) * 2
+
+
+        while loop_iterations < max_loop_iterations:
+            loop_iterations += 1
             if abort_check():
                 print("Analysis aborted by abort_check.")
-                # self.iracing_manager.replay_set_speed(0) # Stop replay
-                return None
+                break
 
-            current_sample_time = i / samples_per_virtual_second # Increment time
+            data_sample = self.iracing_manager.get_latest_data_sample()
 
-            # Simulate Data Processing
-            # Add LeaderBoardSnapshot
-            drivers_lb = [
-                Driver(car_number="22", user_name="Player One (Sim)", position=1, pit_stop_count=0),
-                Driver(car_number="4", user_name="Player Two (Sim)", position=2, pit_stop_count=0),
-                Driver(car_number="17", user_name="Player Three (Sim)", position=3, pit_stop_count=1),
-            ]
+            if not data_sample:
+                if (time.monotonic() - last_data_received_monotonic_time) > no_new_data_timeout_seconds:
+                    print("No new data received for an extended period. Assuming end of replay or issue.")
+                    break
+                if not self.iracing_manager.is_replay_playing() and last_session_time > 0: # Replay stopped
+                    print("Replay is no longer playing and data has been received previously. Ending analysis.")
+                    break
+                time.sleep(0.05) # Shorter sleep when potentially waiting for data
+                continue
+
+            current_session_time = data_sample.get('SessionTime', last_session_time)
+
+            if current_session_time <= last_session_time and last_session_time != -1.0:
+                if (time.monotonic() - last_data_received_monotonic_time) > no_new_data_timeout_seconds:
+                    print(f"SessionTime has not advanced for {no_new_data_timeout_seconds}s. Ending analysis.")
+                    break
+                time.sleep(0.05)
+                continue
+
+            last_session_time = current_session_time
+            last_data_received_monotonic_time = time.monotonic()
+
+            if current_session_time > max_replay_time_to_analyze:
+                print(f"Reached max analysis duration of {max_replay_time_to_analyze}s replay time.")
+                break
+
+            if not data_sample.get('IsReplayPlaying', True) and current_session_time > 0:
+                print(f"Replay indicates not playing at SessionTime {current_session_time:.2f}s. Ending analysis.")
+                break
+
+            # --- Populate OverlayData based on SDK sample & SessionInfo ---
+            player_car_idx_sample = data_sample.get('PlayerCarIdx')
+
+            # LeaderBoardSnapshot
+            drivers_for_lb: List[Driver] = []
+            if session_info_dict and 'DriverInfo' in session_info_dict and 'Drivers' in session_info_dict['DriverInfo']:
+                for sdk_driver in session_info_dict['DriverInfo']['Drivers'][:10]: # Limit to first 10 for example
+                    drivers_for_lb.append(Driver(
+                        car_number=sdk_driver.get('CarNumber', 'N/A'),
+                        user_name=sdk_driver.get('UserName', 'Unknown Driver'),
+                        position=sdk_driver.get('CarIdx', -1) +1, # Placeholder for live position
+                        car_idx=sdk_driver.get('CarIdx', -1)
+                    ))
+            else: # Fallback to simpler dummy drivers if no session info
+                 drivers_for_lb.append(Driver(car_number=str(player_car_idx_sample or "0"), user_name=f"PlayerCar_{player_car_idx_sample or 0}", position=1))
+                 drivers_for_lb.append(Driver(car_number="XX", user_name="OtherCar1 (Sim)", position=2))
+
             overlay_data.leader_boards.append(
                 LeaderBoardSnapshot(
-                    start_time=current_sample_time,
-                    drivers=drivers_lb,
-                    race_position="P1", # Example
-                    lap_counter=f"Lap {1 + int(current_sample_time // 60)}/{simulated_duration_seconds // 60 + 1}" # Example
+                    start_time=current_session_time,
+                    drivers=drivers_for_lb,
+                    race_position=str(data_sample.get('PlayerCarPosition', 'N/A')), # Example
+                    lap_counter=f"L {data_sample.get('PlayerCarLap', 0)}/{session_info_dict.get('WeekendInfo',{}).get('SessionLaps', 'N/A') if session_info_dict else 'N/A'}"
                 )
             )
 
-            # Add CamDriver
-            if drivers_lb:
-                overlay_data.cam_drivers.append(
-                    CamDriver(start_time=current_sample_time, cam_group_number=1, current_driver=drivers_lb[0])
-                )
-
-            # Add MessageState
-            if i % (10 * samples_per_virtual_second) == 0 : # Every 10 virtual seconds
-                 overlay_data.message_states.append(
-                    MessageState(time=current_sample_time, messages=[f"Commentary at {current_sample_time:.1f}s"])
-                )
-
-            # Add FastLap (conditionally)
-            if i == (15 * samples_per_virtual_second): # At 15 virtual seconds
-                if drivers_lb:
-                    overlay_data.fastest_laps.append(
-                        FastLap(start_time=current_sample_time, driver=drivers_lb[0], lap_time=75.5)
+            # CamDriver - focus on player car using info from session_info_dict if possible
+            current_player_driver_info = None
+            if session_info_dict and player_car_idx_sample is not None:
+                sdk_drivers_list = session_info_dict.get('DriverInfo', {}).get('Drivers', [])
+                player_info_from_session = next((d for d in sdk_drivers_list if d.get('CarIdx') == player_car_idx_sample), None)
+                if player_info_from_session:
+                    current_player_driver_info = Driver(
+                        car_number=player_info_from_session.get('CarNumber', str(player_car_idx_sample)),
+                        user_name=player_info_from_session.get('UserName', f"PlayerCar_{player_car_idx_sample}"),
+                        car_idx=player_car_idx_sample
+                        # position and pit_stop_count would come from live telemetry ideally
                     )
+            if not current_player_driver_info and player_car_idx_sample is not None: # Fallback
+                current_player_driver_info = Driver(car_number=str(player_car_idx_sample), user_name=f"PlayerCar_{player_car_idx_sample}", car_idx=player_car_idx_sample)
 
-            # Add generic RaceEvent (e.g., for general info or non-critical events)
-            overlay_data.race_events.append(
-                RaceEvent(start_time=current_sample_time, end_time=current_sample_time + 0.5, interest='GenericInfo', with_overtake=False)
-            )
+            if current_player_driver_info:
+                overlay_data.cam_drivers.append(
+                    CamDriver(start_time=current_session_time,
+                              cam_group_number=data_sample.get('CamCameraNumber', 1), # Use SDK CamCameraNumber if available
+                              current_driver=current_player_driver_info)
+                )
 
-            # Simulate time passing for the loop iteration itself (not for replay time)
-            # time.sleep(0.001) # Keep this very short or remove if simulation is primary goal
+            # MessageState (example: every 30s of session time)
+            if int(current_session_time) % 30 == 0 and \
+               (len(overlay_data.message_states) == 0 or
+                abs(overlay_data.message_states[-1].time - current_session_time) > 1.0): # Avoid multiple per second
+                overlay_data.message_states.append(
+                    MessageState(time=current_session_time, messages=[f"Live Update: {current_session_time:.1f}s"])
+                )
 
-            if i % (20 * samples_per_virtual_second) == 0: # Print progress every 20 virtual seconds
-                print(f"  Analysis loop progress: {current_sample_time:.1f} / {simulated_duration_seconds:.1f} virtual seconds")
+            # FastLap (simplified: if LapLastLapTime is valid and new overall best)
+            last_lap_time_sample = data_sample.get('LapLastLapTime')
+            if last_lap_time_sample is not None and last_lap_time_sample > 0:
+                is_new_fastest = not overlay_data.fastest_laps or \
+                                 last_lap_time_sample < min(fl.lap_time for fl in overlay_data.fastest_laps)
+                if is_new_fastest and current_player_driver_info:
+                    overlay_data.fastest_laps.append(
+                        FastLap(start_time=current_session_time, driver=current_player_driver_info, lap_time=float(last_lap_time_sample))
+                    )
+                    print(f"  New fastest lap recorded: {last_lap_time_sample:.3f}s at session time {current_session_time:.2f}s")
 
+            # Incident Processing (periodically)
+            if current_session_time - last_incident_check_session_time >= incident_check_interval_seconds:
+                new_incidents = self.iracing_manager.get_incidents(0, 0) # Params not used by basic version
+                for inc_dict in new_incidents:
+                    overlay_data.race_events.append(
+                        RaceEvent(
+                            start_time=inc_dict.get('session_time', current_session_time),
+                            end_time=inc_dict.get('session_time', current_session_time) + 1.0, # Arbitrary 1s duration
+                            interest='PlayerIncident', # From basic get_incidents
+                            with_overtake=False, # Cannot determine from basic incident count
+                            # position, race_lap_number could be added if available in data_sample
+                        )
+                    )
+                last_incident_check_session_time = current_session_time
 
-        # self.iracing_manager.replay_set_speed(0) # Stop replay
-        print("Simulated analysis loop finished.")
+            if loop_iterations % 120 == 0:
+                print(f"  Analysis loop progress: SessionTime={current_session_time:.2f}s")
+
+        print("Main data analysis loop finished.")
+        if self.iracing_manager.is_connected(): # Check before sending command
+            self.iracing_manager.replay_set_speed(0) # Pause replay after analysis
+            time.sleep(0.5) # Allow SDK to process pause command
 
         # Saving OverlayData
         timestamp_str = Datetime.now().strftime("%Y%m%d_%H%M%S")

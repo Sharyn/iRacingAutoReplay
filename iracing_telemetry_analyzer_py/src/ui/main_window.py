@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from ..replay_analyzer import ReplayAnalyzer
     from ..ffmpeg_transcoder import FFmpegTranscoder
     from ..video_capture_manager import VideoCaptureManager
+    from ..iracing_manager import IRacingManagerInterface # For type hint
+    from ..pyirsdk_manager import PYIRSDK_AVAILABLE # To display SDK status
 
 
 class MainWindow(QMainWindow):
@@ -33,7 +35,8 @@ class MainWindow(QMainWindow):
         plugin_manager: 'PluginManager',
         replay_analyzer: 'ReplayAnalyzer',
         ffmpeg_transcoder: 'FFmpegTranscoder',
-        video_capture_manager: 'VideoCaptureManager', # Added
+        video_capture_manager: 'VideoCaptureManager',
+        iracing_manager: 'IRacingManagerInterface', # Added
         parent: Optional[QWidget] = None
     ):
         super().__init__(parent)
@@ -44,6 +47,7 @@ class MainWindow(QMainWindow):
         self.replay_analyzer = replay_analyzer
         self.ffmpeg_transcoder = ffmpeg_transcoder
         self.video_capture_manager = video_capture_manager
+        self.iracing_manager = iracing_manager # Store the instance
 
         self.setWindowTitle("iRacing Telemetry Analyzer & Replay Director")
         self.setGeometry(100, 100, 800, 600) # x, y, width, height
@@ -62,6 +66,18 @@ class MainWindow(QMainWindow):
 
         # File Menu
         file_menu = menu_bar.addMenu("&File")
+
+        self.connect_iracing_action = QAction("Connect to iRacing", self)
+        self.connect_iracing_action.triggered.connect(self._connect_iracing)
+        file_menu.addAction(self.connect_iracing_action)
+
+        self.disconnect_iracing_action = QAction("Disconnect from iRacing", self)
+        self.disconnect_iracing_action.triggered.connect(self._disconnect_iracing)
+        self.disconnect_iracing_action.setEnabled(False) # Initially disabled
+        file_menu.addAction(self.disconnect_iracing_action)
+
+        file_menu.addSeparator()
+
         exit_action = QAction("&Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
@@ -99,6 +115,15 @@ class MainWindow(QMainWindow):
 
         status_group.setLayout(status_layout)
         self.main_layout.addWidget(status_group)
+
+        # Status Bar for telemetry
+        self.ui_telemetry_status_label = QLabel("Telemetry: N/A")
+        self.statusBar().addPermanentWidget(self.ui_telemetry_status_label)
+
+        # Telemetry polling timer
+        self.telemetry_timer = QTimer(self)
+        self.telemetry_timer.timeout.connect(self._update_live_telemetry)
+        self.telemetry_timer.start(250) # Poll 4 times a second
 
 
     def _create_capture_analysis_tab(self):
@@ -631,6 +656,69 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"{new_state}: {message}", 5000) # Show in status bar for 5s
         else:
             self.statusBar().showMessage(f"State: {new_state}", 5000)
+
+        # Update Connect/Disconnect menu items
+        if hasattr(self, 'connect_iracing_action'): # Ensure menu is created
+            is_im_connected = self.iracing_manager.is_connected()
+            self.connect_iracing_action.setEnabled(not is_im_connected)
+            self.disconnect_iracing_action.setEnabled(is_im_connected)
+
+
+    def _connect_iracing(self):
+        """Slot to connect to iRacing."""
+        self.status_text_edit.append("Attempting to connect to iRacing...")
+        self.app_state_manager.change_state(self.app_state_manager.current_state, "Connecting to iRacing...", force_notify=True)
+        self.iracing_manager.connect()
+        if self.iracing_manager.is_connected():
+            self.app_state_manager.change_state(AppStates.IDLE, "Successfully connected to iRacing.")
+            self.status_text_edit.append("INFO: Connected to iRacing.")
+        else:
+            status_msg = "Failed to connect to iRacing."
+            if not PYIRSDK_AVAILABLE:
+                status_msg += " (pyirsdk library not found/mocked)"
+            else:
+                status_msg += " (iRacing not running or SDK not active)"
+            self.app_state_manager.change_state(AppStates.IDLE, status_msg) # Or ERROR state?
+            self.status_text_edit.append(f"ERROR: {status_msg}")
+            QMessageBox.warning(self, "Connection Failed", status_msg)
+        self._update_ui_from_state(self.app_state_manager.current_state, self.app_state_manager.last_message)
+
+
+    def _disconnect_iracing(self):
+        """Slot to disconnect from iRacing."""
+        self.status_text_edit.append("Disconnecting from iRacing...")
+        self.iracing_manager.disconnect()
+        self.app_state_manager.change_state(AppStates.IDLE, "Disconnected from iRacing.")
+        self.status_text_edit.append("INFO: Disconnected from iRacing.")
+        self._update_ui_from_state(self.app_state_manager.current_state, self.app_state_manager.last_message)
+
+
+    def _update_live_telemetry(self):
+        """Called by QTimer to update live telemetry display."""
+        if not hasattr(self, 'ui_telemetry_status_label'): # UI not fully ready
+            return
+
+        if self.iracing_manager.is_connected():
+            data_sample = self.iracing_manager.get_latest_data_sample()
+            if data_sample:
+                # Example: "Connected | Time: 123.45s | Speed: 150km/h | Gear: 4 | R: 10/100"
+                session_time = data_sample.get('SessionTime', -1)
+                speed_ms = data_sample.get('Speed', 0)
+                speed_kmh = speed_ms * 3.6
+                gear = data_sample.get('Gear', 'N')
+                replay_frame = data_sample.get('ReplayFrameNum', 0)
+                is_replay_playing = data_sample.get('IsReplayPlaying', False)
+
+                telemetry_str = (
+                    f"Connected | Time: {session_time:.2f}s | "
+                    f"Speed: {speed_kmh:.0f}km/h | Gear: {gear} | "
+                    f"Replay Frame: {replay_frame} ({'Play' if is_replay_playing else 'Pause'})"
+                )
+                self.ui_telemetry_status_label.setText(telemetry_str)
+            else:
+                self.ui_telemetry_status_label.setText("Connected | Waiting for new data...")
+        else:
+            self.ui_telemetry_status_label.setText(f"Disconnected. SDK Available: {PYIRSDK_AVAILABLE}")
 
 
     def closeEvent(self, event):
