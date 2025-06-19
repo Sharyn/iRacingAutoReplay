@@ -134,7 +134,30 @@ class AppSettings:
             with open(self.filepath, 'w', encoding='utf-8') as configfile:
                 parser.write(configfile)
         except IOError as e:
+            # It would be good to raise this or handle it in a way the UI can catch
             print(f"Error: Could not save settings to {self.filepath}. Error: {e}")
+            raise # Re-raise for UI to catch or handle
+
+    def reset_to_defaults(self):
+        """
+        Resets the in-memory settings attributes to their program default values
+        as defined in DEFAULT_SETTINGS.
+        """
+        print("Resetting AppSettings to program defaults.")
+        for section, options in DEFAULT_SETTINGS.items():
+            for key, value in options.items():
+                # Ensure dynamic paths like working_folder are correctly re-evaluated if DEFAULT_SETTINGS
+                # contains callables or special markers.
+                # Currently, DEFAULT_SETTINGS stores direct values (str for paths, evaluated at import time).
+                # If DEFAULT_SETTINGS itself had functions to get defaults, call them here.
+                # For this project, DEFAULT_SETTINGS has static (at import time) values.
+                setattr(self, key, value)
+
+        # If DEFAULT_CONFIG_FILE_PATH or DEFAULT_WORKING_FOLDER_BASE were dynamic based on
+        # e.g. Path.home() and that could change or needs re-evaluation, it's more complex.
+        # But for this app, these are fine as they are set from DEFAULT_SETTINGS.
+        # The main dynamic one is working_folder which is `str(DEFAULT_WORKING_FOLDER_BASE)`.
+        # This is correctly reset by the loop above.
 
 
 if __name__ == '__main__':
@@ -191,7 +214,10 @@ if __name__ == '__main__':
     if temp_settings_path.exists():
         print(f"\nTesting resilience to missing option in INI file (using {temp_settings_path})...")
         # Save current state (e.g., bitrate 20M)
-        settings_loaded.save_settings()
+
+        # We need to use the save method of the settings_loaded instance,
+        # which is configured with temp_settings_path as its filepath.
+        settings_loaded.save_settings() # settings_loaded.filepath is temp_settings_path
 
         # Read content, remove a line, write back
         with open(temp_settings_path, 'r', encoding='utf-8') as f:
@@ -206,6 +232,16 @@ if __name__ == '__main__':
         settings_after_delete = AppSettings(settings_filepath=temp_settings_path)
         print(f"  Loaded video bitrate after delete: {settings_after_delete.video_bitrate} (should be default: {DEFAULT_SETTINGS['Encoding']['video_bitrate']})")
         assert settings_after_delete.video_bitrate == DEFAULT_SETTINGS['Encoding']['video_bitrate']
+
+        # Test reset_to_defaults
+        print("\nTesting reset_to_defaults...")
+        settings_after_delete.plugin_name = "TEMPORARY_PLUGIN_NAME_FOR_RESET_TEST"
+        assert settings_after_delete.plugin_name != DEFAULT_SETTINGS['General']['plugin_name']
+        settings_after_delete.reset_to_defaults()
+        assert settings_after_delete.plugin_name == DEFAULT_SETTINGS['General']['plugin_name']
+        assert settings_after_delete.video_bitrate == DEFAULT_SETTINGS['Encoding']['video_bitrate'] # Should be back to default
+        print("  reset_to_defaults appears to work.")
+
         # Clean up
         os.remove(temp_settings_path)
         print(f"  Cleaned up {temp_settings_path}")
