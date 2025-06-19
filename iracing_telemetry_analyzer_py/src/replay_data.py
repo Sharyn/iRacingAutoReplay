@@ -93,6 +93,14 @@ class Driver:
     car_idx: Optional[int] = None   # Runtime data, not typically from XML.
     short_name: Optional[str] = None # Runtime data or derived, not typically from XML.
 
+    # New fields for richer leaderboard information
+    status: Optional[str] = None          # e.g., 'OnTrack', 'InPits', 'Finished', 'Out'
+    current_lap: Optional[int] = None     # Current lap number for this driver
+    lap_dist_pct: Optional[float] = None  # Percentage of current lap completed (0.0 to 1.0)
+    best_lap_time: Optional[float] = None # Driver's best lap time in session
+    last_lap_time: Optional[float] = None # Driver's last lap time
+    class_position: Optional[int] = None  # Position within their car class
+
     # Note: In C#, Driver is often part of another class (e.g., LeaderBoardDriver).
     # The XML structure dictates parsing. This class assumes direct tags for now.
 
@@ -125,8 +133,13 @@ class RaceEvent:
     end_time: float          # XML: <EndTime>
     interest: str            # XML: <Interest> (enum-like: "Incident", "Overtake", "Battle")
     with_overtake: bool      # XML: <WithOvertake>
-    position: int = 9999     # XML: <Position>
-    race_lap_number: int = 0 # XML: <RaceLapNumber>
+    position: int = 9999     # XML: <Position> (Overall position at time of event, if applicable)
+    race_lap_number: int = 0 # XML: <RaceLapNumber> (Lap number at time of event)
+
+    # New fields for more detailed event description
+    car_idx: Optional[int] = None         # Optional: Car index primarily involved or triggering the event
+    other_car_idx: Optional[int] = None   # Optional: Car index of another car involved (e.g., in battle/overtake)
+    details: Optional[str] = None         # Optional: Further text details about the event
 
     @classmethod
     def from_xml(cls, element: ET.Element) -> 'RaceEvent':
@@ -147,6 +160,9 @@ class RaceEvent:
         _add_sub_element(el, 'WithOvertake', self.with_overtake)
         _add_sub_element(el, 'Position', self.position)
         _add_sub_element(el, 'RaceLapNumber', self.race_lap_number)
+        _add_sub_element(el, 'CarIdx', self.car_idx, include_if_none=False)
+        _add_sub_element(el, 'OtherCarIdx', self.other_car_idx, include_if_none=False)
+        _add_sub_element(el, 'Details', self.details, include_if_none=False)
 
 
 @dataclass

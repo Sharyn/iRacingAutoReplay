@@ -47,7 +47,15 @@ DEFAULT_SETTINGS = {
     # Section: Analysis
     "Analysis": {
         "analysis_replay_speed": 16,             # Integer: Replay speed during analysis phase (1x, 2x, 4x, 8x, 16x)
-        "max_analysis_duration_seconds": 600,    # Integer: Max seconds of replay time to analyze
+        "max_analysis_duration_seconds": 600,    # Integer: Max seconds of replay time to analyze from race start
+        "analysis_pre_roll_seconds": 5,          # Integer: Seconds to pre-roll before detected race start for analysis
+        "min_off_track_duration_for_event": 1.0, # Float: Minimum seconds a car must be off-track to log an event
+        "battle_proximity_threshold_pct": 0.005, # Float: Lap distance % threshold to consider cars 'in battle' (0.5%)
+        "min_battle_duration_seconds": 5.0,      # Float: Minimum seconds cars must be in proximity to log a 'Battle' event
+        "overtake_proximity_threshold_pct": 0.002, # Float: Lap distance % for overtake detection (tighter)
+        "track_typical_lap_time_seconds": 90.0,  # Float: Estimated typical lap time for a track, used for some heuristics
+                                                 # (e.g. converting % lap distance to rough time proximity if needed)
+        "fastest_lap_event_duration_seconds": 7.0, # Float: Duration for "Fastest Lap" type events on timeline
     }
 }
 

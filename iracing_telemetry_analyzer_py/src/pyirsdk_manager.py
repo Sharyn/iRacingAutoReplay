@@ -31,37 +31,65 @@ except ImportError:
                 'Gear': 0,
                 'IsInitialized': False,
                 'IsConnected': False,
-                'SessionInfo': { # More structured mock SessionInfo
+                'SessionInfo': {
                     'WeekendInfo': {
                         'TrackName': 'MockRaceway International',
                         'TrackDisplayName': 'MockRaceway',
                         'TrackID': 101,
                         'SessionID': 1234567890,
-                        'WeekendOptions': {'NumStarters': 2},
+                        'WeekendOptions': {'NumStarters': 3}, # Ensure enough drivers for examples
+                        'SessionLaps': 'Unlimited', # For lap counter in ReplayAnalyzer
                     },
-                    'SessionInfo': {
+                    'SessionInfo': { # Ensure a 'Race' session exists for ReplayAnalyzer
                         'Sessions': [
                             {'SessionNum': 0, 'SessionType': 'Practice', 'ResultsFastestLap': -1, 'ResultsOfficial': 0},
                             {'SessionNum': 1, 'SessionType': 'Qualify', 'ResultsFastestLap': -1, 'ResultsOfficial': 1},
-                            {'SessionNum': 2, 'SessionType': 'Race', 'ResultsFastestLap': -1, 'ResultsOfficial': 0}
+                            {'SessionNum': 2, 'SessionType': 'Race', 'ResultsFastestLap': -1, 'ResultsOfficial': 0} # Target this
                         ]
                     },
                     'DriverInfo': {
-                        'DriverCarIdx': 0, # Player's car index
+                        'DriverCarIdx': 0,
                         'Drivers': [
-                            {'CarIdx': 0, 'UserName': 'Mock Player', 'CarNumber': '42', 'IRating': 2500, 'LicString': 'A 4.99'},
-                            {'CarIdx': 1, 'UserName': 'Mock AI Opponent 1', 'CarNumber': '007', 'IRating': 1500, 'LicString': 'R 0.00'},
-                            {'CarIdx': 2, 'UserName': 'Mock AI Opponent 2', 'CarNumber': '13', 'IRating': 1800, 'LicString': 'C 3.50'},
+                            {'CarIdx': 0, 'UserName': 'Mock Player', 'CarNumber': '42', 'IRating': 2500, 'LicString': 'A 4.99', 'TeamID': 0},
+                            {'CarIdx': 1, 'UserName': 'Mock AI Opponent 1', 'CarNumber': '007', 'IRating': 1500, 'LicString': 'R 0.00', 'TeamID': 0},
+                            {'CarIdx': 2, 'UserName': 'Mock AI Opponent 2', 'CarNumber': '13', 'IRating': 1800, 'LicString': 'C 3.50', 'TeamID': 0},
                         ]
                     },
-                    'SplitTimeInfo': {}, # Often present
-                    'CarSetup': { # Basic car setup info
+                    'SplitTimeInfo': {},
+                    'CarSetup': {
                         'Suspension': {'LFrideHeight': '5.5 cm', 'RFrideHeight': '5.6 cm'},
                         'Tires': {'LFcoldPressure': '150 kpa', 'RFcoldPressure': '150 kpa'}
                     }
                 },
-                'PlayerCarMyIncidentCount': 0,
+                'PlayerCarMyIncidentCount': 0, # This is a single value for the player
+                'SessionState': 1,
+                'SessionFlags': 0,
+                'SessionNum': 0,
+                # Initialize per-car telemetry arrays
+                # For mock, let's use a smaller default number of cars, e.g., 10 for easier management.
+                # Real SDK provides up to 64. ReplayAnalyzer will iterate based on actual array length.
+                '_num_mock_cars': 10, # Internal helper for mock data sizing
+                'CarIdxLap': [0] * 10,
+                'CarIdxLapCompleted': [0] * 10,
+                'CarIdxLapDistPct': [-1.0] * 10,
+                'CarIdxTrackSurface': [IRSDK_TRK_LOC_ON_TRACK] * 10, # Start all on track
+                'CarIdxClassPosition': [i+1 for i in range(10)], # Simple default positions
+                'CarIdxF2Time': [0.0] * 10,
+                'CarIdxBestLapTime': [-1.0] * 10, # Per-driver best lap time
+                'CarIdxLastLapTime': [-1.0] * 10, # Per-driver last lap time
+                'LapFastestLap': -1.0,          # Overall session fastest lap (single float value)
+                'CarIdxSessionFlags': [0] * 10,
+                'CarIdxOnPitRoad': [False] * 10,
+                'CarIdxSteer': [0.0] * 10,
+                'CarIdxRPM': [1000.0] * 10, # Default RPM
+                'CarIdxGear': [1] * 10,      # Default gear
+                'CarIdxIncidentCount': [0] * 10, # New per-car incident count
             }
+            self._session_state_timeline = {}
+            self._session_flags_timeline = {}
+            # For car-specific telemetry timelines:
+            # self._car_telemetry_timeline[session_time_threshold] = {car_idx: {telemetry_key: value}}
+            self._car_telemetry_timeline: Dict[float, Dict[int, Dict[str, Any]]] = {}
             print("MockIRSDK instantiated.")
 
         def startup(self, test_file=None, dump_to=None) -> bool:
@@ -86,16 +114,77 @@ except ImportError:
 
         def freeze_var_buffer_latest(self):
             # print("MockIRSDK: freeze_var_buffer_latest() called.")
-            # Simulate time passing and data changing slightly if connected
-            if self._mock_connected: # This won't be true in current mock startup
+            if self._mock_connected:
                 self._mock_data['SessionTick'] += 1
-                self._mock_data['SessionTime'] += 1/60.0
-                self._mock_data['ReplayFrameNum'] +=1
+                self._mock_data['SessionTime'] += 1/60.0 # Simulate 60Hz data
+                self._mock_data['ReplayFrameNum'] += 2 # Simulate 2 frames per tick at 30fps video for 60Hz data
+
+                # Update SessionState and SessionFlags based on global timelines
+                current_session_time = self._mock_data['SessionTime']
+                for t, state in sorted(self._session_state_timeline.items()):
+                    if current_session_time >= t:
+                        self._mock_data['SessionState'] = state # Update global session state
+                for t, flags in sorted(self._session_flags_timeline.items()):
+                    if current_session_time >= t:
+                        self._mock_data['SessionFlags'] = flags # Update global session flags
+
+                # Update per-car telemetry based on _car_telemetry_timeline
+                num_mock_cars = self._mock_data.get('_num_mock_cars', 10)
+                for t, car_updates_at_time_t in sorted(self._car_telemetry_timeline.items()):
+                    if current_session_time >= t:
+                        for car_idx, telemetry_updates in car_updates_at_time_t.items():
+                            if 0 <= car_idx < num_mock_cars: # Ensure car_idx is valid for mock arrays
+                                for key_to_update, value in telemetry_updates.items():
+                                    if key_to_update in self._mock_data and isinstance(self._mock_data[key_to_update], list):
+                                        if car_idx < len(self._mock_data[key_to_update]):
+                                            self._mock_data[key_to_update][car_idx] = value
+                                        else:
+                                            print(f"MockIRSDK Warning: CarIdx {car_idx} out of bounds for {key_to_update}")
+                                    else:
+                                        # This case is for non-array keys or if a key was missed in init.
+                                        # Unlikely for per-car telemetry which should be arrays.
+                                        print(f"MockIRSDK Warning: Key {key_to_update} not an array or not found in _mock_data for car {car_idx}")
+                                        # self._mock_data[key_to_update] = value # Or handle more specifically
             return self._mock_data # In real pyirsdk, freeze doesn't return data itself
 
         def __getitem__(self, key: str) -> Any:
             # print(f"MockIRSDK: __getitem__('{key}') called.")
-            return self._mock_data.get(key) # Return default/None if key missing
+            # Handle dynamic timeline-based values first
+            current_session_time = self._mock_data.get('SessionTime', 0) # Ensure SessionTime is available
+            if key == 'SessionState':
+                for t, state in sorted(getattr(self, '_session_state_timeline', {}).items()):
+                    if current_session_time >= t:
+                        self._mock_data['SessionState'] = state
+                return self._mock_data.get(key)
+            elif key == 'SessionFlags':
+                for t, flags in sorted(getattr(self, '_session_flags_timeline', {}).items()):
+                    if current_session_time >= t:
+                        self._mock_data['SessionFlags'] = flags
+                return self_mock_data.get(key)
+
+            return self._mock_data.get(key)
+
+        def get(self, key: str, default: Any = None) -> Any:
+            """Mock for dictionary .get() method, incorporating timeline logic."""
+            # This ensures that when PyIrSdkManager uses .get for these keys,
+            # it still gets the timeline-updated values.
+            current_session_time = self._mock_data.get('SessionTime', 0)
+            if key == 'SessionState':
+                for t, state in sorted(getattr(self, '_session_state_timeline', {}).items()):
+                    if current_session_time >= t:
+                        self._mock_data['SessionState'] = state
+                return self._mock_data.get(key, default)
+            elif key == 'SessionFlags':
+                for t, flags in sorted(getattr(self, '_session_flags_timeline', {}).items()):
+                    if current_session_time >= t:
+                        self._mock_data['SessionFlags'] = flags
+                return self._mock_data.get(key, default)
+            elif key == 'PlayerCarMyIncidentCount': # Assuming this might also be timeline driven for tests
+                # This was handled by patching in tests, but could be integrated here too if desired.
+                # For now, let the patched version in tests handle PlayerCarMyIncidentCount.
+                pass
+
+            return self._mock_data.get(key, default)
 
         def broadcast_msg(self, msg_type, val1, val2=0, val3=0):
             print(f"MockIRSDK: broadcast_msg({msg_type}, {val1}, {val2}, {val3}) called.")
@@ -130,17 +219,46 @@ except ImportError:
 
         pyirsdk = MockPyirsdkModule() # Instantiate the mock module
 
+# Define iRacing SDK constants for track locations (standard values)
+# These might be exposed by the real pyirsdk, but defining them here ensures availability for mock & logic.
+IRSDK_TRK_LOC_NOT_IN_WORLD = -1
+IRSDK_TRK_LOC_OFF_TRACK = 0
+IRSDK_TRK_LOC_ON_TRACK = 1
+IRSDK_TRK_LOC_IN_PIT_STALL = 2
+# Note: iRacing official irsdk_TrkLoc enum for "approaching pits" is not explicitly defined.
+# Often, logic combines CarIdxOnPitRoad and CarIdxTrackSurface to determine this.
+# For simplicity, ReplayAnalyzer might use a broader interpretation or focus on key states.
+# IRSDK_TRK_LOC_APROACHING_PITS = 3 # This was a conceptual value
+IRSDK_TRK_LOC_ON_PIT_ROAD = 4 # This corresponds to irsdk_TrkLoc_InPitRoad in C# SDK often.
+                              # The actual pyirsdk might use different enum values or direct strings/ints.
+                              # ReplayAnalyzer will use these defined constants.
+
+# For SessionFlags (already used in ReplayAnalyzer conceptually):
+# IRSDK_CHECKERED_FLAG_VALUE = 0x00000004
+
 
 class PyIrSdkManager(IRacingManagerInterface):
     """
     Implementation of IRacingManagerInterface using the pyirsdk library.
     """
     # Based on pyirsdk, variable names are often PascalCase.
-    TELEMETRY_KEYS = [
+    GENERAL_TELEMETRY_KEYS = [
         'SessionTime', 'SessionTick', 'ReplayFrameNum', 'IsReplayPlaying',
-        'PlayerCarIdx', 'Speed', 'RPM', 'Gear'
+        'PlayerCarIdx', 'Speed', 'RPM', 'Gear', 'SessionState', 'SessionFlags', 'SessionNum',
+        'PlayerCarPosition', 'PlayerCarClassPosition', 'PlayerCarLap',
+        'LapLastLapTime', # This is often player-specific in iRacing's direct telemetry
+                          # but ReplayAnalyzer will primarily use CarIdxLastLapTime for all cars.
+        'LapFastestLap',  # Overall session fastest lap time
+        'PlayerCarMyIncidentCount'
     ]
-    STATUS_KEYS = ['IsInitialized', 'IsConnected'] # iRacing internal state vars
+    # Keys for per-car telemetry arrays (names match iRacing SDK variables)
+    PER_CAR_TELEMETRY_KEYS = [
+        'CarIdxLap', 'CarIdxLapCompleted', 'CarIdxLapDistPct', 'CarIdxTrackSurface',
+        'CarIdxClassPosition', 'CarIdxF2Time', 'CarIdxBestLapTime', 'CarIdxLastLapTime',
+        'CarIdxSessionFlags', 'CarIdxOnPitRoad', 'CarIdxSteer', 'CarIdxRPM', 'CarIdxGear',
+        'CarIdxIncidentCount' # Added per-car incident count
+    ]
+    # STATUS_KEYS = ['IsInitialized', 'IsConnected'] # These are fetched via GENERAL_TELEMETRY_KEYS
 
     def __init__(self):
         """Initializes the PyIrSdkManager."""
@@ -250,24 +368,37 @@ class PyIrSdkManager(IRacingManagerInterface):
             self.ir_sdk.freeze_var_buffer_latest()
 
             # Check if data is new using SessionTick (PascalCase for iRacing vars)
-            current_tick = self.ir_sdk['SessionTick']
-            if current_tick == self.last_tick_count and self.last_tick_count != -1: # Avoid initial state being "not new"
-                # print("Debug: No new data tick.")
+            current_tick = self.ir_sdk['SessionTick'] # General key
+            if current_tick == self.last_tick_count and self.last_tick_count != -1:
+                # print("PyIrSdkManager.get_latest_data_sample: No new data tick.")
                 return None # No new data
             self.last_tick_count = current_tick
 
-            data_sample = {key: self.ir_sdk[key] for key in self.TELEMETRY_KEYS}
+            data_sample = {}
+            # Fetch general telemetry keys
+            for key in self.GENERAL_TELEMETRY_KEYS:
+                try:
+                    data_sample[key] = self.ir_sdk[key]
+                except KeyError:
+                    # print(f"PyIrSdkManager.get_latest_data_sample: General key '{key}' not found.")
+                    data_sample[key] = None # Or some other default
+
+            # Fetch per-car telemetry arrays
+            for key in self.PER_CAR_TELEMETRY_KEYS:
+                try:
+                    data_sample[key] = self.ir_sdk[key]
+                except KeyError:
+                    # print(f"PyIrSdkManager.get_latest_data_sample: Per-car key '{key}' not found.")
+                    data_sample[key] = [] # Default to empty list for missing arrays
+
             return data_sample
-        except (TypeError, KeyError) as e: # TypeError if ir_sdk is None, KeyError if var missing
-            print(f"Error fetching telemetry data sample: {e}")
-            # This could happen if a key in TELEMETRY_KEYS is not available
-            # or if ir_sdk is not behaving as expected (e.g. mock issues).
+        except (TypeError, KeyError) as e:
+            print(f"PyIrSdkManager.get_latest_data_sample: Error fetching telemetry data - {e}")
             return None
-        except Exception as e: # Catch any other pyirsdk related errors
-            print(f"Unexpected error getting data sample: {e}")
+        except Exception as e:
+            print(f"PyIrSdkManager.get_latest_data_sample: Unexpected error - {e}")
             return None
 
-    # --- Stubbed Methods ---
     def get_session_data(self) -> Optional[Dict[str, Any]]:
         """
         Retrieves static session information (e.g., track, weather, drivers).
@@ -471,16 +602,25 @@ if __name__ == '__main__':
     print(f"Is connected: {manager.is_connected()}")
 
     if manager.is_connected():
-        print("\nFetching data samples for 5 ticks (if new data):")
-        for i in range(10): # Try up to 10 times to get 5 new data ticks
+        print("\nFetching data samples for a few ticks (if new data):")
+        found_new_data_count = 0
+        for i in range(30): # Try up to 30 times (0.5s of sim time if 60Hz)
             sample = manager.get_latest_data_sample()
             if sample:
-                print(f"  Sample {i+1}: {sample}")
-                if len([s for s in manager.TELEMETRY_KEYS if s in sample]) >= 5: # Heuristic for "enough data"
+                found_new_data_count +=1
+                print(f"  Sample (Tick {sample.get('SessionTick', 'N/A')}): SessionTime={sample.get('SessionTime', 'N/A'):.2f}, "
+                      f"Speed={sample.get('Speed', 'N/A'):.2f}, Gear={sample.get('Gear', 'N')}")
+                if 'CarIdxLap' in sample:
+                    print(f"    CarIdxLap (first few): {sample['CarIdxLap'][:4]}")
+                if found_new_data_count >= 2: # Get at least 2 new data points
                     break
             else:
-                print(f"  Sample {i+1}: No new data or not connected.")
+                # print(f"  Attempt {i+1}: No new data or not connected.")
+                pass
+            if not manager.is_connected(): break # Stop if connection lost
             time.sleep(1/60.0) # Simulate waiting for next sim tick
+        if found_new_data_count == 0:
+            print("  No new data samples were fetched in the loop.")
 
         print("\n--- Testing Session Data ---")
         session_data = manager.get_session_data()

@@ -1,0 +1,56 @@
+[project]
+name = "iRacingTelemetryAnalyzer"
+version = "0.1.0"
+description = "An application to analyze iRacing telemetry data and manage replays."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT License"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+keywords = ["iracing", "telemetry", "replay", "racing", "simulator"]
+
+dependencies = [
+    "PyQt6", # For the GUI
+    "python-iracing-sdk-placeholder; sys_platform == 'win32'", # Placeholder for iRacing SDK (typically Windows only)
+    # configparser is part of the standard library, no need to list it here,
+    # but we acknowledge its use for application settings.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-qt",
+]
+
+[project.scripts]
+# Placeholder for a potential command-line entry point
+# iracing_analyzer = "src.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+backend-path = "."
+
+[tool.setuptools]
+# If you have simple needs and don't want to create a setup.cfg or setup.py
+# package-dir = {"" = "src"} # Uncomment if your main package is directly in src
+packages = ["src"] # Adjust if your main package has a different name or structure
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+# Placeholder for future tools like linters or formatters
+# [tool.black]
+# line-length = 88
+# target-version = ['py38', 'py39', 'py310', 'py311']
+
+# [tool.isort]
+# profile = "black"
