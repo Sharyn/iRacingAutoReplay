@@ -277,8 +277,8 @@ if __name__ == '__main__':
     print("3. Run the application again to see if your manual edits are loaded correctly.")
 
     print("\nAppSettings module demonstration finished.")
-        os.remove(temp_settings_path)
-        print(f"  Cleaned up {temp_settings_path}")
+    os.remove(temp_settings_path)
+    print(f"  Cleaned up {temp_settings_path}")
 
     print("\nAppSettings module structure created.")
 
