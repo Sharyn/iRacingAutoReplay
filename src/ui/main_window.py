@@ -12,16 +12,19 @@ from PyQt6.QtWidgets import (
     QLabel, QSpinBox, QComboBox, QGroupBox, QFormLayout, QSizePolicy
 )
 
+from src.app_state_manager import AppStates # Added for runtime availability
+from src.irsdk_manager import IRSDK_AVAILABLE # Added for runtime availability
+
 if TYPE_CHECKING:
     from src.app_settings import AppSettings
-    from src.app_state_manager import AppStateManager, AppStates
+    from src.app_state_manager import AppStateManager # AppStates already imported above
     # Forward declare other managers if specific methods are needed, else use Any
     from src.plugin_manager import PluginManager
     from src.replay_analyzer import ReplayAnalyzer
     from src.ffmpeg_transcoder import FFmpegTranscoder
     from src.video_capture_manager import VideoCaptureManager
     from src.iracing_manager import IRacingManagerInterface # For type hint
-    from src.irsdk_manager import IRSDK_AVAILABLE # To display SDK status
+    # IRSDK_AVAILABLE imported above
 
 
 class MainWindow(QMainWindow):

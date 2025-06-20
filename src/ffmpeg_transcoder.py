@@ -184,26 +184,20 @@ except ImportError:
             # Simulate stderr for progress parsing
             self.stderr = self._mock_stderr_progress()
             self.stdout = None # Not typically used for progress
-                    self.pid = 12345 # Mock PID
-                    # Simulate stderr for progress parsing
-                    self.stderr = self._mock_stderr_progress()
 
-                def _mock_stderr_progress(self):
-                    # Yield a few progress lines then stop
-                    yield b"frame= 10 fps=0.0 q=0.0 size=N/A time=00:00:00.40 bitrate=N/A speed=0.00x\n"
-                    yield b"frame= 20 fps=0.0 q=0.0 size=N/A time=00:00:00.80 bitrate=N/A speed=0.00x\n"
-                    yield b"progress=continue\n" # FFmpeg uses this in some modes
-                    yield b"frame= 30 fps=0.0 q=0.0 size=N/A time=00:00:01.20 bitrate=N/A speed=0.00x\n"
-                    yield b"progress=end\n" # Or just finish
+        def _mock_stderr_progress(self):
+            # Yield a few progress lines then stop
+            yield b"frame= 10 fps=0.0 q=0.0 size=N/A time=00:00:00.40 bitrate=N/A speed=0.00x\n"
+            yield b"frame= 20 fps=0.0 q=0.0 size=N/A time=00:00:00.80 bitrate=N/A speed=0.00x\n"
+            yield b"progress=continue\n" # FFmpeg uses this in some modes
+            yield b"frame= 30 fps=0.0 q=0.0 size=N/A time=00:00:01.20 bitrate=N/A speed=0.00x\n"
+            yield b"progress=end\n" # Or just finish
 
-                def poll(self): return None # Simulate running
-                def wait(self, timeout=None): return 0 # Simulate finished successfully
-                def terminate(self): print("MOCK FFMPEG: process.terminate() called")
-                def communicate(self, input=None, timeout=None):
-                    return (b"mock stdout", b"mock stderr with final progress line if any")
-
-
-            return MockProcess(full_cmd_list)
+        def poll(self): return None # Simulate running
+        def wait(self, timeout=None): return 0 # Simulate finished successfully
+        def terminate(self): print("MOCK FFMPEG: process.terminate() called")
+        def communicate(self, input=None, timeout=None):
+            return (b"mock stdout", b"mock stderr with final progress line if any")
 
     class MockFFmpegModule:
         def __init__(self):
