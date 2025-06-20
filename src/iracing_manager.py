@@ -1,243 +1,250 @@
-import logging
-import time
+"""
+Defines the interface for interacting with the iRacing simulation.
 
-logger = logging.getLogger(__name__)
+This module provides an abstract base class (or a regular class with
+NotImplementedError) that outlines the methods required for connecting to iRacing,
+retrieving telemetry and session data, and controlling replay functions.
+Concrete implementations of this interface will handle the actual SDK interactions.
+"""
 
-class IRacingManagerInterface:
+from abc import ABC, abstractmethod
+from typing import Optional, List, Dict, Any, Callable
+
+# Using ABC for a more formal interface definition,
+# but methods will still raise NotImplementedError in a base concrete class
+# or could be left as pure abstract methods.
+# For this task, a regular class with NotImplementedError is also fine.
+# Let's go with ABC and @abstractmethod for clarity of intent.
+
+
+class IRacingManagerInterface(ABC):
     """
-    Abstract interface for iRacing SDK interactions.
-    This defines the contract for any class that manages communication
-    with the iRacing simulator.
+    Interface for managing interactions with the iRacing simulation.
+
+    This class defines a contract for services that provide iRacing data
+    and control, such as connecting to the sim, fetching telemetry,
+    session information, and controlling replays.
     """
 
-    def __init__(self, settings=None):
-        self.settings = settings # Potentially AppSettings instance
-        self.is_connected = False
-        self.current_telemetry = {}
-        self.session_info = {}
+    @abstractmethod
+    def connect(self) -> None:
+        """
+        Establishes a connection to the iRacing simulation.
+        This typically involves initializing the SDK and verifying that iRacing is running.
+        """
+        pass
 
-    def connect(self):
-        """Establishes connection to the iRacing simulator."""
-        raise NotImplementedError
+    @abstractmethod
+    def disconnect(self) -> None:
+        """
+        Disconnects from the iRacing simulation and cleans up SDK resources.
+        """
+        pass
 
-    def disconnect(self):
-        """Disconnects from the iRacing simulator."""
-        raise NotImplementedError
+    @abstractmethod
+    def is_connected(self) -> bool:
+        """
+        Checks if currently connected to the iRacing simulation and the SDK is active.
 
-    def get_telemetry(self, keys=None):
+        Returns:
+            bool: True if connected, False otherwise.
         """
-        Retrieves specific telemetry data.
-        :param keys: A list of telemetry keys to retrieve. If None, retrieve all available.
-        :return: A dictionary of telemetry data.
-        """
-        raise NotImplementedError
+        pass
 
-    def get_session_info(self):
+    @abstractmethod
+    def get_latest_data_sample(self) -> Optional[Dict[str, Any]]:
         """
-        Retrieves session information (e.g., track details, driver roster).
-        :return: A dictionary or structured object of session info.
-        """
-        raise NotImplementedError
+        Retrieves the latest telemetry data sample from iRacing.
 
-    def wait_for_new_data(self, timeout=None):
-        """
-        Waits for new telemetry or session data to become available.
-        This is crucial for live data processing.
-        :param timeout: Optional timeout in seconds.
-        :return: True if new data is available, False otherwise (e.g., on timeout).
-        """
-        raise NotImplementedError
+        The structure of the returned dictionary will depend on the specific SDK
+        and the data available (e.g., speed, RPM, gear, lap times, session status).
+        A more specific Pydantic or dataclass model could be used in a concrete
+        implementation.
 
-    def start_replay_playback(self):
-        """Starts or resumes replay playback in the simulator."""
-        raise NotImplementedError
+        Returns:
+            Optional[Dict[str, Any]]: A dictionary containing the latest telemetry data,
+                                       or None if no new data is available or not connected.
+        """
+        pass
 
-    def stop_replay_playback(self):
-        """Stops or pauses replay playback in the simulator."""
-        raise NotImplementedError
+    @abstractmethod
+    def get_session_data(self) -> Optional[Dict[str, Any]]: # Or Optional[str] for raw XML
+        """
+        Retrieves static session information from iRacing.
 
-    def set_replay_position(self, frame_num=None, session_time=None):
-        """
-        Sets the replay position.
-        :param frame_num: Frame number to jump to.
-        :param session_time: Session time (in seconds) to jump to.
-        """
-        raise NotImplementedError
+        This data typically includes details about the track, weather, drivers,
+        car setup, etc. It's similar to the iRacingSDK's SessionData string (often XML).
+        The return type could be a parsed dictionary/object or the raw string.
 
-    def set_replay_speed(self, speed_multiplier):
+        Returns:
+            Optional[Dict[str, Any]]: A dictionary or object representing the session data,
+                                       or None if not available or not connected.
+                                       Alternatively, could return Optional[str] if providing raw XML.
         """
-        Sets the replay playback speed.
-        :param speed_multiplier: e.g., 1.0 for normal, 0.5 for half speed, 2.0 for double.
-        """
-        raise NotImplementedError
+        pass
 
-    def trigger_camera_change(self, camera_group_num, camera_num, car_idx=None):
+    @abstractmethod
+    def replay_move_to_frame(self, frame_number: int) -> None:
         """
-        Triggers a camera change in the simulator.
-        :param camera_group_num: The camera group number.
-        :param camera_num: The camera number within the group.
-        :param car_idx: Optional car index to focus on. If None, current focused car.
+        Moves the iRacing replay to a specific frame number.
+
+        Args:
+            frame_number: The target frame number in the replay.
         """
-        raise NotImplementedError
+        pass
+
+    @abstractmethod
+    def replay_set_speed(self, speed_multiplier: int) -> None:
+        """
+        Sets the playback speed of the iRacing replay.
+
+        Args:
+            speed_multiplier: The desired speed multiplier (e.g., 1 for normal,
+                              2 for double speed, 0 for pause if supported, etc.).
+        """
+        pass
+
+    @abstractmethod
+    def replay_get_current_frame(self) -> Optional[int]:
+        """
+        Gets the current frame number of the iRacing replay.
+
+        Returns:
+            Optional[int]: The current replay frame number, or None if not available.
+        """
+        pass
+
+    @abstractmethod
+    def replay_get_session_time(self) -> Optional[float]:
+        """
+        Gets the current simulation time within the replay.
+
+        Returns:
+            Optional[float]: The current session time in seconds, or None if not available.
+        """
+        pass
+
+    @abstractmethod
+    def is_replay_playing(self) -> bool:
+        """
+        Checks if the iRacing replay is currently playing.
+
+        Returns:
+            bool: True if the replay is playing, False otherwise (e.g., paused, stopped).
+        """
+        pass
+
+    @abstractmethod
+    def get_incidents(self, wait_time_seconds: float, max_incidents: int) -> List[Dict[str, Any]]:
+        """
+        Retrieves a list of incidents that occurred during the session or replay.
+        This method might involve some form of polling or event listening depending on SDK capabilities.
+
+        Args:
+            wait_time_seconds: Time to wait or monitor for incidents.
+            max_incidents: Maximum number of incidents to return.
+
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents
+                                   an incident. The structure of these dictionaries is
+                                   a placeholder and would be defined by the concrete implementation.
+        """
+        pass
+
+    @abstractmethod
+    def focus_iracing_window(self) -> None:
+        """
+        Brings the iRacing simulation window to the foreground.
+        This is equivalent to Win32 SetForegroundWindow.
+        """
+        pass
+
+    @abstractmethod
+    def wait_for_iracing_to_start(self, abort_check: Callable[[], bool]) -> bool:
+        """
+        Waits for the iRacing simulation to start and the SDK to become active.
+
+        This method should periodically check for iRacing's presence.
+        The `abort_check` callable provides a mechanism to interrupt the waiting process.
+
+        Args:
+            abort_check: A function that returns True if the waiting should be aborted.
+
+        Returns:
+            bool: True if iRacing started and SDK is active, False if the operation
+                  was aborted via `abort_check`.
+        """
+        pass
 
 
 class PlaceholderIRacingManager(IRacingManagerInterface):
     """
-    A placeholder implementation of the IRacingManagerInterface.
-    This class simulates interactions with the iRacing SDK for development
-    and testing purposes when the actual SDK is not available or not needed.
+    A placeholder implementation of IRacingManagerInterface.
+    All methods raise NotImplementedError, serving as a concrete class that
+    can be instantiated for development or testing when actual iRacing
+    interaction is not available or needed.
     """
 
-    def __init__(self, settings=None):
-        super().__init__(settings)
-        self.sdk_path = self.settings.get_setting("General", "iracing_sdk_path") if settings else "N/A"
-        logger.info(f"PlaceholderIRacingManager initialized. SDK path from settings: {self.sdk_path}")
-        self._mock_data_thread = None
-        self._stop_mock_data = False
+    def connect(self) -> None:
+        raise NotImplementedError("connect() is not implemented in PlaceholderIRacingManager")
 
-    def connect(self):
-        logger.info("Attempting to connect to iRacing (Placeholder)...")
-        # Simulate connection delay
-        time.sleep(0.5)
-        self.is_connected = True
-        logger.info("Successfully connected to iRacing (Placeholder).")
-        # Populate with some mock session info
-        self.session_info = {
-            "TrackName": "Placeholder Track",
-            "TrackLength": "4.0 km",
-            "SessionType": "Race",
-            "DriverInfo": {"DriverUserID": 12345, "UserName": "Placeholder Driver"},
-            "WeekendInfo": {"TrackDisplayName": "Placeholder Circuit Ville"}
-        }
-        self.current_telemetry = {
-            "Speed": 0, "RPM": 800, "Gear": 1, "Lap": 0, "PlayerCarIdx": 0,
-            "SessionTime": 0.0, "CarIdxLapDistPct": [0.0] * 64, "CarIdxTrackSurface": [0] * 64,
-            "CarIdxOnPitRoad": [False] * 64, "CarIdxIncidentCount": [0] * 64,
-            "PlayerCarMyIncidentCount": 0, "PlayerCarTeamIncidentCount": 0,
-            "SessionFlags": 0, # e.g. green, yellow, checkered
-            "SessionNum": 1,
-            "SessionLapsTotal": 20,
-            "SessionTimeRemain": 3600.0,
-            "CarIdxBestLapTime": [-1.0] * 64,
-            "CarIdxLastLapTime": [-1.0] * 64,
-        }
-        return True
+    def disconnect(self) -> None:
+        raise NotImplementedError("disconnect() is not implemented in PlaceholderIRacingManager")
 
-    def disconnect(self):
-        logger.info("Disconnecting from iRacing (Placeholder)...")
-        self.is_connected = False
-        self.current_telemetry = {}
-        self.session_info = {}
-        logger.info("Successfully disconnected from iRacing (Placeholder).")
-        return True
+    def is_connected(self) -> bool:
+        raise NotImplementedError("is_connected() is not implemented in PlaceholderIRacingManager")
 
-    def get_telemetry(self, keys=None):
-        if not self.is_connected:
-            logger.warning("Cannot get telemetry: Not connected (Placeholder).")
-            return {}
+    def get_latest_data_sample(self) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError("get_latest_data_sample() is not implemented in PlaceholderIRacingManager")
 
-        # Simulate telemetry updates
-        self.current_telemetry["Speed"] = (self.current_telemetry.get("Speed", 0) + 5) % 300
-        self.current_telemetry["RPM"] = (self.current_telemetry.get("RPM", 800) + 100) % 9000
-        self.current_telemetry["SessionTime"] = self.current_telemetry.get("SessionTime", 0) + 0.016
+    def get_session_data(self) -> Optional[Dict[str, Any]]: # Or Optional[str]
+        raise NotImplementedError("get_session_data() is not implemented in PlaceholderIRacingManager")
 
-        if keys:
-            return {key: self.current_telemetry.get(key) for key in keys if key in self.current_telemetry}
-        return self.current_telemetry
+    def replay_move_to_frame(self, frame_number: int) -> None:
+        raise NotImplementedError("replay_move_to_frame() is not implemented in PlaceholderIRacingManager")
 
-    def get_session_info(self):
-        if not self.is_connected:
-            logger.warning("Cannot get session info: Not connected (Placeholder).")
-            return {}
-        return self.session_info
+    def replay_set_speed(self, speed_multiplier: int) -> None:
+        raise NotImplementedError("replay_set_speed() is not implemented in PlaceholderIRacingManager")
 
-    def wait_for_new_data(self, timeout=None):
-        if not self.is_connected:
-            return False
-        # Simulate waiting for new data; in a real SDK, this would block until new data arrives
-        # or use an event-based system.
-        time.sleep(0.016) # Simulate ~60Hz update rate
-        # In a real scenario, this would return True if data actually changed.
-        # For placeholder, we just assume it always "updates".
-        return True
+    def replay_get_current_frame(self) -> Optional[int]:
+        raise NotImplementedError("replay_get_current_frame() is not implemented in PlaceholderIRacingManager")
 
-    def start_replay_playback(self):
-        if not self.is_connected:
-            logger.warning("Cannot start replay: Not connected (Placeholder).")
-            return
-        logger.info("Replay playback started (Placeholder).")
+    def replay_get_session_time(self) -> Optional[float]:
+        raise NotImplementedError("replay_get_session_time() is not implemented in PlaceholderIRacingManager")
 
-    def stop_replay_playback(self):
-        if not self.is_connected:
-            logger.warning("Cannot stop replay: Not connected (Placeholder).")
-            return
-        logger.info("Replay playback stopped (Placeholder).")
+    def is_replay_playing(self) -> bool:
+        raise NotImplementedError("is_replay_playing() is not implemented in PlaceholderIRacingManager")
 
-    def set_replay_position(self, frame_num=None, session_time=None):
-        if not self.is_connected:
-            logger.warning("Cannot set replay position: Not connected (Placeholder).")
-            return
-        if frame_num is not None:
-            logger.info(f"Replay position set to frame {frame_num} (Placeholder).")
-        elif session_time is not None:
-            logger.info(f"Replay position set to session time {session_time}s (Placeholder).")
+    def get_incidents(self, wait_time_seconds: float, max_incidents: int) -> List[Dict[str, Any]]:
+        raise NotImplementedError("get_incidents() is not implemented in PlaceholderIRacingManager")
 
-    def set_replay_speed(self, speed_multiplier):
-        if not self.is_connected:
-            logger.warning("Cannot set replay speed: Not connected (Placeholder).")
-            return
-        logger.info(f"Replay speed set to {speed_multiplier}x (Placeholder).")
+    def focus_iracing_window(self) -> None:
+        raise NotImplementedError("focus_iracing_window() is not implemented in PlaceholderIRacingManager")
 
-    def trigger_camera_change(self, camera_group_num, camera_num, car_idx=None):
-        if not self.is_connected:
-            logger.warning("Cannot change camera: Not connected (Placeholder).")
-            return
-        focus = f"car index {car_idx}" if car_idx is not None else "current car"
-        logger.info(f"Camera changed to group {camera_group_num}, camera {camera_num}, focusing on {focus} (Placeholder).")
+    def wait_for_iracing_to_start(self, abort_check: Callable[[], bool]) -> bool:
+        raise NotImplementedError("wait_for_iracing_to_start() is not implemented in PlaceholderIRacingManager")
 
 
-if __name__ == "__main__":
-    # Example usage of the placeholder manager
-    logging.basicConfig(level=logging.INFO) # For testing this script directly
+if __name__ == '__main__':
+    # Example of how this might be used (though you can't call methods without them erroring)
 
-    # Create dummy AppSettings for the placeholder
-    class DummyAppSettings:
-        def get_setting(self, section, key, fallback=None):
-            if section == "General" and key == "iracing_sdk_path":
-                return "mock/path/to/sdk"
-            return fallback
+    # This would be a concrete implementation using an actual SDK
+    # class MyActualIRacingManager(IRacingManagerInterface):
+    #     def connect(self) -> None: print("Actually connecting...")
+    #     def disconnect(self) -> None: print("Actually disconnecting...")
+    #     def is_connected(self) -> bool: return True
+    #     # ... implement all other methods ...
 
-    dummy_settings = DummyAppSettings()
-    manager = PlaceholderIRacingManager(settings=dummy_settings)
+    print("IRacingManagerInterface and PlaceholderIRacingManager defined.")
+    print("This module provides a contract for iRacing SDK interaction classes.")
 
-    if manager.connect():
-        print("Connected to placeholder iRacing SDK.")
+    # manager: IRacingManagerInterface = PlaceholderIRacingManager()
+    # try:
+    #     manager.connect()
+    # except NotImplementedError as e:
+    #     print(f"Caught expected error: {e}")
 
-        # Get some telemetry
-        telemetry = manager.get_telemetry(["Speed", "RPM", "Gear"])
-        print(f"Initial Telemetry: {telemetry}")
+    # print("\nTo use this, a concrete class implementing IRacingManagerInterface is needed,")
+    # print("which would wrap a specific iRacing Python SDK.")
 
-        # Simulate some time passing
-        for _ in range(5):
-            if manager.wait_for_new_data():
-                telemetry = manager.get_telemetry(["Speed", "SessionTime"])
-                print(f"Updated Telemetry: Speed={telemetry.get('Speed')}, SessionTime={telemetry.get('SessionTime'):.2f}")
-            time.sleep(0.1)
 
-        # Get session info
-        session_info = manager.get_session_info()
-        print(f"Session Info: {session_info.get('TrackName')}, Type: {session_info.get('SessionType')}")
-
-        # Replay controls
-        manager.start_replay_playback()
-        manager.set_replay_speed(2.0)
-        manager.set_replay_position(session_time=120.5)
-        manager.trigger_camera_change(camera_group_num=3, camera_num=1, car_idx=5)
-        manager.stop_replay_playback()
-
-        manager.disconnect()
-        print("Disconnected from placeholder iRacing SDK.")
-    else:
-        print("Failed to connect to placeholder iRacing SDK.")
-
-    print("PlaceholderIRacingManager example finished.")

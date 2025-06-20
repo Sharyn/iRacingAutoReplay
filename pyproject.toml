@@ -1,41 +1,42 @@
 [project]
-name = "iRacingTelemetryAnalyzer"
+name = "iracing_telemetry_analyzer"
 version = "0.1.0"
-description = "An application to analyze iRacing telemetry data and manage replays."
+description = "iRacing Telemetry Analysis Tool"
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT License"}
+requires-python = ">=3.9"
+license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Your Name", email = "you@example.com"},
 ]
-keywords = ["iracing", "telemetry", "replay", "racing", "simulator"]
+maintainers = [
+    {name = "Your Name", email = "you@example.com"},
+]
 
 dependencies = [
-    "PyQt6", # For the GUI
-    "python-iracing-sdk-placeholder; sys_platform == 'win32'", # Placeholder for iRacing SDK (typically Windows only)
-    # configparser is part of the standard library, no need to list it here,
-    # but we acknowledge its use for application settings.
+    "pyirsdk",                        # For iRacing SDK interaction
+    "PyQt6",                          # For the GUI
+    # configparser is part of the standard library
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "pytest-qt",
+    "pytest-cov",
 ]
 
-[project.scripts]
-# Placeholder for a potential command-line entry point
-# iracing_analyzer = "src.main:main"
+[project.urls]
+Homepage = "https://github.com/yourusername/iracing_telemetry_analyzer" # Or specific path to Python project
+Documentation = "https://github.com/yourusername/iracing_telemetry_analyzer/blob/main/iracing_telemetry_analyzer_py/docs/README.md"
+Repository = "https://github.com/yourusername/iracing_telemetry_analyzer.git" # This is fine if repo hosts multiple projects
+Changelog = "https://github.com/yourusername/iracing_telemetry_analyzer/blob/main/iracing_telemetry_analyzer_py/CHANGELOG.md"
 
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
-backend-path = "."
 
 [tool.setuptools]
-# If you have simple needs and don't want to create a setup.cfg or setup.py
-# package-dir = {"" = "src"} # Uncomment if your main package is directly in src
-packages = ["src"] # Adjust if your main package has a different name or structure
+packages = ["src"]
+package-dir = {"" = "src"}
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -47,10 +48,38 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 
-# Placeholder for future tools like linters or formatters
+# Example: Basic tool-specific configuration (if any)
 # [tool.black]
 # line-length = 88
-# target-version = ['py38', 'py39', 'py310', 'py311']
+# target-version = ['py38']
 
 # [tool.isort]
 # profile = "black"
+# line_length = 88
+# known_first_party = ["src"]
+
+# [tool.mypy]
+# python_version = "3.8"
+# warn_return_any = true
+# warn_unused_configs = true
+# namespace_packages = true
+# explicit_package_bases = true
+# check_untyped_defs = true
+# disallow_untyped_defs = true
+# disallow_incomplete_defs = true
+# disallow_untyped_decorators = true
+# ignore_missing_imports = true # Adjust as per SDK availability
+# allow_redefinition = false
+# strict_equality = true
+# no_implicit_optional = true
+# warn_redundant_casts = true
+# warn_unused_ignores = true
+# # Add paths for mypy to check
+# files = ["src", "tests"]
+
+# [[tool.mypy.overrides]]
+# module = "PyQt6.*" # Example: ignore missing stubs for PyQt6 if they cause issues
+# ignore_missing_imports = true
+# [[tool.mypy.overrides]]
+# module = "python_iracing_sdk_placeholder.*" # Example: ignore missing stubs for placeholder
+# ignore_missing_imports = true

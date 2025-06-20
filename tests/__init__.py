@@ -1,1 +1,2 @@
-# This file makes tests a Python package (optional, but good practice)
+# This file makes Python treat the 'tests' directory as a package.
+# It can be empty.

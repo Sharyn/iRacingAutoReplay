@@ -1,242 +1,148 @@
+"""
+Main GUI application script for the iRacing Telemetry Analyzer.
+Initializes backend components, sets up the main window, and starts the Qt event loop.
+"""
+
 import sys
-import logging
-# from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QPushButton
-# from .app_settings import AppSettings
-# from .iracing_manager import PlaceholderIRacingManager # Use placeholder for now
-# from .replay_analyzer import ReplayAnalyzer
+from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from PyQt6.QtWidgets import QApplication
 
-# Dummy classes to allow for structure without full PyQt6 if not available in test env
+# Assuming the script is run from the root of the project or 'src' is in PYTHONPATH
+# Adjust imports based on actual execution context if necessary.
 try:
-    from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QPushButton, QTextEdit
-    logger.info("PyQt6 imported successfully.")
-except ImportError:
-    logger.warning("PyQt6 not found. Using dummy UI classes for basic structure.")
-    # Define dummy classes if PyQt6 is not available (e.g., in a CI environment without GUI)
-    class QApplication:
-        def __init__(self, args): pass
-        def exec(self): pass
-    class QMainWindow:
-        def __init__(self): pass
-        def setCentralWidget(self, widget): pass
-        def setWindowTitle(self, title): pass
-        def show(self): pass
-        def closeEvent(self, event): pass
-    class QWidget:
-        def __init__(self): pass
-        def setLayout(self, layout): pass
-    class QVBoxLayout:
-        def __init__(self, parent=None): pass
-        def addWidget(self, widget): pass
-    class QLabel:
-        def __init__(self, text=""): pass
-    class QPushButton:
-        def __init__(self, text=""): pass
-        def clicked(self): return self # mock connect
-        def connect(self, slot): pass # mock connect
-    class QTextEdit:
-        def __init__(self): pass
-        def setReadOnly(self, readonly): pass
-        def append(self, text): pass
+    from src.app_settings import AppSettings
+    from src.app_state_manager import AppStateManager, AppStates
+    from src.ui.main_window import MainWindow
+    from src.irsdk_manager import IrsdkManager, IRSDK_AVAILABLE # Changed to IrsdkManager
+    from src.video_capture_manager import VideoCaptureManager
+    from src.replay_analyzer import ReplayAnalyzer
+    from src.ffmpeg_transcoder import FFmpegTranscoder
+    from src.plugin_manager import PluginManager
+    from src.replay_data import OverlayData # For mock overlay data in main if needed
+except ImportError as e:
+    print(f"Error importing project modules: {e}")
+    print("Ensure the script is run from a context where 'src' modules are discoverable.")
+    print("For example, run 'python -m iracing_telemetry_analyzer_py.src.main_gui' from the project root,")
+    print("or ensure 'iracing_telemetry_analyzer_py' is in PYTHONPATH.")
+    sys.exit(1)
 
 
-class MainWindow(QMainWindow):
-    """Main application window."""
+def main():
+    """
+    Main function to initialize and run the application.
+    """
+    app = QApplication(sys.argv)
 
-    def __init__(self, app_settings=None, iracing_manager=None, replay_analyzer=None):
-        super().__init__()
-        # self.app_settings = app_settings or AppSettings() # Load if not provided
-        # self.iracing_manager = iracing_manager # Will be initialized outside and passed in
-        # self.replay_analyzer = replay_analyzer # Will be initialized outside and passed in
+    # 1. Initialize Core Settings and State Management
+    # AppSettings will try to load from its default path or use defaults.
+    app_settings = AppSettings()
+    app_state_manager = AppStateManager()
 
-        # For now, let's assume these are passed or None
-        self.app_settings = app_settings
-        self.iracing_manager = iracing_manager
-        self.replay_analyzer = replay_analyzer
+    # Log initial state (e.g., application started)
+    app_state_manager.change_state(
+        AppStates.IDLE,
+        "Application initialized. All systems nominal.",
+        force_notify=True # Ensure UI updates with initial message
+    )
 
-        self.setWindowTitle("iRacing Telemetry Analyzer & Replay Director")
+    # 2. Initialize Plugin Manager and Load Plugins
+    plugin_manager = PluginManager(settings=app_settings)
+    # Determine plugin directory: relative to this script's location in src/
+    # Assuming main_gui.py is in src/, and plugins are in src/plugins/
+    # Path(__file__) is src/main_gui.py
+    # Path(__file__).parent is src/
+    # Path(__file__).parent / "plugins" is src/plugins/
+    script_dir = Path(__file__).parent.resolve()
+    plugins_dir = script_dir / "plugins"
+    print(f"Loading plugins from: {plugins_dir}")
+    plugin_manager.load_plugins(str(plugins_dir))
 
-        # Central widget and layout
-        self.central_widget = QWidget()
-        self.layout = QVBoxLayout(self.central_widget)
-        self.setCentralWidget(self.central_widget)
-
-        # Placeholder UI elements
-        self.status_label = QLabel("Welcome! Connect to iRacing or load a replay.")
-        self.layout.addWidget(self.status_label)
-
-        self.connect_button = QPushButton("Connect to iRacing (Placeholder)")
-        if hasattr(self.connect_button, 'clicked'): # Check if it's a real QPushButton
-             self.connect_button.clicked.connect(self.toggle_connection)
-        self.layout.addWidget(self.connect_button)
-
-        self.analyze_button = QPushButton("Analyze Last Session (Placeholder)")
-        if hasattr(self.analyze_button, 'clicked'):
-            self.analyze_button.clicked.connect(self.run_analysis)
-        self.layout.addWidget(self.analyze_button)
-
-        self.log_output_area = QTextEdit()
-        if hasattr(self.log_output_area, 'setReadOnly'):
-            self.log_output_area.setReadOnly(True)
-        self.layout.addWidget(self.log_output_area)
-
-        self._setup_logging_redirect()
-
-        logger.info("MainWindow initialized.")
-        self.log_message("Application GUI started.")
-
-
-    def _setup_logging_redirect(self):
-        """Redirects Python logging to the QTextEdit widget."""
-        class QtLogHandler(logging.Handler):
-            def __init__(self, widget):
-                super().__init__()
-                self.widget = widget
-                self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-
-            def emit(self, record):
-                msg = self.format(record)
-                if hasattr(self.widget, 'append'): # Check if it's a real QTextEdit
-                    self.widget.append(msg)
-
-        log_handler = QtLogHandler(self.log_output_area)
-        logging.getLogger().addHandler(log_handler)
-        # Optionally set the level for the GUI logger if you want it different from root
-        logging.getLogger().setLevel(logging.INFO)
+    # Set a default active plugin if any are loaded
+    available_plugins = plugin_manager.get_available_plugins()
+    if available_plugins:
+        # For now, just pick the first one as default or a specific named one
+        # In a real app, this might come from settings.
+        default_plugin_name = available_plugins[0].name
+        # Create a dummy OverlayData for plugin initialization if needed here,
+        # or expect MainWindow to handle setting active plugin later when actual data is ready.
+        # For now, let's not initialize it here, let UI/workflow do it.
+        # plugin_manager.set_active_plugin(default_plugin_name, OverlayData())
+        print(f"Default plugin to be potentially activated: {default_plugin_name}")
+        # The MainWindow will need the plugin_manager to populate any plugin selection UI.
+    else:
+        print("No plugins found or loaded.")
+        app_state_manager.change_state(AppStates.IDLE, "Warning: No plugins loaded.", force_notify=True)
 
 
-    def log_message(self, message):
-        """Appends a message to the log area."""
-        logger.info(message) # This will be caught by the QtLogHandler
-        # self.log_output_area.append(message) # Direct append if not using logger
+    # 3. Initialize Backend Managers (Service Locators or similar)
+    # Use IrsdkManager
+    iracing_manager = IrsdkManager()
 
-    def toggle_connection(self):
-        if self.iracing_manager:
-            if self.iracing_manager.is_connected:
-                self.iracing_manager.disconnect()
-                self.status_label.setText("Disconnected from iRacing.")
-                self.connect_button.setText("Connect to iRacing (Placeholder)")
-                self.log_message("Disconnected from iRacing (Placeholder).")
-            else:
-                if self.iracing_manager.connect():
-                    self.status_label.setText(f"Connected to iRacing: {self.iracing_manager.session_info.get('TrackDisplayName', 'N/A')}")
-                    self.connect_button.setText("Disconnect from iRacing")
-                    self.log_message("Connected to iRacing (Placeholder).")
-                else:
-                    self.status_label.setText("Failed to connect to iRacing.")
-                    self.log_message("Failed to connect to iRacing (Placeholder).")
-        else:
-            self.status_label.setText("iRacing Manager not available.")
-            self.log_message("iRacing Manager not available for connection.")
+    video_capture_manager = VideoCaptureManager(settings=app_settings) # Pass settings
 
+    replay_analyzer = ReplayAnalyzer(
+        iracing_manager=iracing_manager,
+        settings=app_settings
+    )
 
-    def run_analysis(self):
-        self.log_message("Starting analysis (Placeholder)...")
-        if self.replay_analyzer and self.iracing_manager:
-            if not self.iracing_manager.is_connected:
-                 # Try to connect if not already, or load mock data for analysis
-                self.log_message("Manager not connected. Attempting to use last known/mock data for analysis.")
-                # For placeholder, we assume manager might have some data or can get it
+    ffmpeg_transcoder = FFmpegTranscoder(
+        settings=app_settings,
+        plugin_manager=plugin_manager # Pass plugin_manager
+    )
 
-            # In a real app, you'd specify if it's live or from file
-            # For now, assume we're analyzing whatever data the analyzer can get via manager
-            self.replay_analyzer.load_replay_data(source="live") # Placeholder for current/last session
-            results = self.replay_analyzer.process_telemetry()
-            summary = self.replay_analyzer.get_analysis_summary()
-
-            self.log_message("Analysis complete.")
-            self.log_message(summary)
-            # Display results in a more structured way in a real UI
-        elif not self.replay_analyzer:
-            self.log_message("Replay Analyzer not available.")
-        elif not self.iracing_manager:
-            self.log_message("iRacing Manager not available for analysis.")
-
-
-    def closeEvent(self, event):
-        """Handle window close event."""
-        logger.info("MainWindow closing.")
-        if self.iracing_manager and self.iracing_manager.is_connected:
-            self.iracing_manager.disconnect()
-        # Perform any other cleanup here
-        event.accept()
-
-
-def start_app():
-    """Initializes and starts the application."""
-    # These imports are inside start_app to ensure they are loaded after any necessary setup
-    # and to keep them local to the app execution context.
-    from app_settings import AppSettings
-    from iracing_manager import PlaceholderIRacingManager # Using placeholder
-    from replay_analyzer import ReplayAnalyzer
-
-    # Configure basic logging if not already configured by src/__init__.py
-    # This is a fallback if the app is run directly and src/__init__ wasn't processed first.
-    if not logging.getLogger().hasHandlers():
-        logging.basicConfig(level=logging.INFO,
-                            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    logger.info("Application bootstrap sequence initiated...")
-
-    # Initialize core components
-    try:
-        app_settings = AppSettings() # Loads default or from settings.ini
-        logger.info(f"AppSettings loaded. Default working dir: {app_settings.get_setting('General', 'default_working_directory')}")
-
-        # Pass settings to manager and analyzer
-        iracing_manager = PlaceholderIRacingManager(settings=app_settings)
-        logger.info("PlaceholderIRacingManager initialized.")
-
-        replay_analyzer = ReplayAnalyzer(iracing_manager=iracing_manager, settings=app_settings)
-        logger.info("ReplayAnalyzer initialized.")
-
-    except Exception as e:
-        logger.error(f"Error during core component initialization: {e}", exc_info=True)
-        # Fallback or exit if critical components fail
-        # For now, we'll try to continue if possible, or some components might be None
-        # Depending on the severity, you might sys.exit() here.
-        # For this placeholder, we'll allow it to proceed to show UI even if some parts failed.
-        # This helps in diagnosing issues if only one part is problematic.
-        app_settings = None
-        iracing_manager = None
-        replay_analyzer = None
-
-
-    # Create and show the main window
-    # QApplication expects sys.argv
-    app_args = sys.argv if hasattr(sys, 'argv') else [''] # Ensure sys.argv exists
-    qt_app = QApplication(app_args)
-
+    # 4. Initialize and Show Main Window
     main_window = MainWindow(
         app_settings=app_settings,
-        iracing_manager=iracing_manager,
-        replay_analyzer=replay_analyzer
+        app_state_manager=app_state_manager,
+        plugin_manager=plugin_manager,
+        replay_analyzer=replay_analyzer,
+        ffmpeg_transcoder=ffmpeg_transcoder,
+        video_capture_manager=video_capture_manager,
+        iracing_manager=iracing_manager # Pass the actual iracing_manager
     )
+
+    # Attempt initial connection to iRacing
+    print("Attempting initial connection to iRacing SDK...")
+    iracing_manager.connect()
+    # Initial status update based on connection attempt
+    if iracing_manager.is_connected():
+        app_state_manager.change_state(AppStates.IDLE, "Successfully connected to iRacing.", force_notify=True)
+    else:
+        status_msg = "Failed to connect to iRacing."
+        if not IRSDK_AVAILABLE:
+            status_msg += " (irsdk library not found/mocked)"
+        else:
+            status_msg += " (iRacing not running or SDK not active)"
+        app_state_manager.change_state(AppStates.IDLE, status_msg, force_notify=True)
+
+
     main_window.show()
 
-    logger.info("Entering Qt application event loop.")
-    # sys.exit(qt_app.exec()) # Standard way to exit
-    # For non-GUI environments or testing, exec may not be ideal or available.
-    # We'll call it if it exists.
-    if hasattr(qt_app, 'exec'):
-        exit_code = qt_app.exec()
-        logger.info(f"Qt application event loop finished with exit code {exit_code}.")
-        sys.exit(exit_code)
-    else:
-        logger.info("QApplication.exec not available. Skipping event loop (likely dummy environment).")
+    # 5. Start Qt Event Loop
+    exit_code = app.exec()
+
+    # Ensure disconnection when application is closing
+    print("Application closing, disconnecting from iRacing SDK...")
+    iracing_manager.disconnect()
+
+    sys.exit(exit_code)
 
 
-if __name__ == "__main__":
-    logger.info("main_gui.py executed directly. Starting application...")
-    # Imports are inside start_app to manage scope and load order.
-    # If run as __main__, this will kick things off.
-    # The basicConfig here is a fallback. Ideally, src/__init__.py or another entry point handles it.
-    if not logging.getLogger().hasHandlers(): # Ensure logging is configured
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+if __name__ == '__main__':
+    # This structure allows running the GUI by executing this script directly.
+    # Ensure that the iracing_telemetry_analyzer_py (parent of src) is in PYTHONPATH
+    # or run using `python -m iracing_telemetry_analyzer_py.src.main_gui` from project root.
 
-    start_app()
-else:
-    # This means the file is being imported.
-    # You might want to log this or perform other setup if necessary.
-    logger.debug(f"main_gui.py imported as module '{__name__}'. Application not started automatically.")
+    # Example of how to adjust sys.path if needed when running script directly:
+    # current_script_path = Path(__file__).resolve()
+    # project_root = current_script_path.parent.parent.parent # Assuming src/main_gui.py, so up three levels
+    # src_path = current_script_path.parent.parent # Assuming src/
+    # if str(project_root) not in sys.path:
+    #    sys.path.insert(0, str(project_root))
+    # if str(src_path) not in sys.path:
+    #    sys.path.insert(0, str(src_path))
+
+    main()
+
+
