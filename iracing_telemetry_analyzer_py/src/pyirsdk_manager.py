@@ -5,7 +5,7 @@ Manages interaction with iRacing Simulator using the pyirsdk library.
 import time
 from typing import Optional, List, Dict, Any, Callable, TYPE_CHECKING
 
-from ..iracing_manager import IRacingManagerInterface # Ensure this path is correct for your structure
+from iracing_telemetry_analyzer_py.src.iracing_manager import IRacingManagerInterface # Ensure this path is correct for your structure
 
 # Conditional import of pyirsdk
 try:
@@ -689,4 +689,4 @@ if __name__ == '__main__':
 
     print("\nPyIrSdkManager demonstration finished.")
 
-
+```

@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .app_settings import AppSettings
-    from .replay_data import OverlayData
+    from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
+    from iracing_telemetry_analyzer_py.src.replay_data import OverlayData
 
 
 # --- FFmpeg Helper ---
@@ -364,4 +364,4 @@ if __name__ == '__main__':
 
     print("\nPluginManager demonstration finished.")
 
-
+```

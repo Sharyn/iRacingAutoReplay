@@ -11,15 +11,15 @@ from PyQt6.QtWidgets import QApplication
 # Assuming the script is run from the root of the project or 'src' is in PYTHONPATH
 # Adjust imports based on actual execution context if necessary.
 try:
-    from app_settings import AppSettings
-    from app_state_manager import AppStateManager, AppStates
-    from ui.main_window import MainWindow
-    from pyirsdk_manager import PyIrSdkManager, PYIRSDK_AVAILABLE # Changed to PyIrSdkManager
-    from video_capture_manager import VideoCaptureManager
-    from replay_analyzer import ReplayAnalyzer
-    from ffmpeg_transcoder import FFmpegTranscoder
-    from plugin_manager import PluginManager
-    from replay_data import OverlayData # For mock overlay data in main if needed
+    from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
+    from iracing_telemetry_analyzer_py.src.app_state_manager import AppStateManager, AppStates
+    from iracing_telemetry_analyzer_py.src.ui.main_window import MainWindow
+    from iracing_telemetry_analyzer_py.src.pyirsdk_manager import PyIrSdkManager, PYIRSDK_AVAILABLE # Changed to PyIrSdkManager
+    from iracing_telemetry_analyzer_py.src.video_capture_manager import VideoCaptureManager
+    from iracing_telemetry_analyzer_py.src.replay_analyzer import ReplayAnalyzer
+    from iracing_telemetry_analyzer_py.src.ffmpeg_transcoder import FFmpegTranscoder
+    from iracing_telemetry_analyzer_py.src.plugin_manager import PluginManager
+    from iracing_telemetry_analyzer_py.src.replay_data import OverlayData # For mock overlay data in main if needed
 except ImportError as e:
     print(f"Error importing project modules: {e}")
     print("Ensure the script is run from a context where 'src' modules are discoverable.")
@@ -145,4 +145,4 @@ if __name__ == '__main__':
 
     main()
 
-
+```

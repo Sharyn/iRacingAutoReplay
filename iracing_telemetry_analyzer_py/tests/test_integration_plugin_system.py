@@ -165,4 +165,4 @@ def test_plugin_manager_activate_non_existent_plugin(
     filters = plugin_manager.get_current_filters(10.0, 1920, 1080)
     assert filters == [], "Should return empty list if plugin activation failed."
 
-
+```

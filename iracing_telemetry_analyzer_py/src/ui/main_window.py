@@ -13,15 +13,15 @@ from PyQt6.QtWidgets import (
 )
 
 if TYPE_CHECKING:
-    from ..app_settings import AppSettings
-    from ..app_state_manager import AppStateManager, AppStates
+    from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
+    from iracing_telemetry_analyzer_py.src.app_state_manager import AppStateManager, AppStates
     # Forward declare other managers if specific methods are needed, else use Any
-    from ..plugin_manager import PluginManager
-    from ..replay_analyzer import ReplayAnalyzer
-    from ..ffmpeg_transcoder import FFmpegTranscoder
-    from ..video_capture_manager import VideoCaptureManager
-    from ..iracing_manager import IRacingManagerInterface # For type hint
-    from ..pyirsdk_manager import PYIRSDK_AVAILABLE # To display SDK status
+    from iracing_telemetry_analyzer_py.src.plugin_manager import PluginManager
+    from iracing_telemetry_analyzer_py.src.replay_analyzer import ReplayAnalyzer
+    from iracing_telemetry_analyzer_py.src.ffmpeg_transcoder import FFmpegTranscoder
+    from iracing_telemetry_analyzer_py.src.video_capture_manager import VideoCaptureManager
+    from iracing_telemetry_analyzer_py.src.iracing_manager import IRacingManagerInterface # For type hint
+    from iracing_telemetry_analyzer_py.src.pyirsdk_manager import PYIRSDK_AVAILABLE # To display SDK status
 
 
 class MainWindow(QMainWindow):
@@ -742,4 +742,4 @@ class MainWindow(QMainWindow):
 
         super().closeEvent(event)
 
-
+```

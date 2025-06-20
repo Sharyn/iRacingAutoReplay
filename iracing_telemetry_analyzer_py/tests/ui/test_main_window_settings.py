@@ -199,4 +199,4 @@ def test_reset_settings_button(main_window: MainWindow, mock_app_settings: AppSe
     main_window.ui_reset_settings_button.click() # Click reset again
     assert main_window.app_settings.highlight_video_only == default_highlight_only
     assert main_window.ui_highlight_video_only_checkbox.isChecked() == default_highlight_only
-
+```
