@@ -8,8 +8,8 @@ from typing import List, Dict, Tuple, Set, Optional, Callable # Added Callable
 from enum import Enum
 
 # Assuming these can be imported. If not, their structure needs to be known.
-from .replay_data import OverlayData, RaceEvent
-from .app_settings import AppSettings
+from iracing_telemetry_analyzer_py.src.replay_data import OverlayData, RaceEvent
+from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
 
 
 @dataclass
@@ -380,4 +380,4 @@ if __name__ == '__main__':
 
     print("\nVideoEditing Demonstration finished.")
 
-
+```

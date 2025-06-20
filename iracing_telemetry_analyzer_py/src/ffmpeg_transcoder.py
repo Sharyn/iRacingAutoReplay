@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Optional, Callable, List, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .app_settings import AppSettings
-    from .plugin_manager import PluginManager
-    from .replay_data import OverlayData
-    from .video_editing import VideoEdit  # For type hint
+    from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
+    from iracing_telemetry_analyzer_py.src.plugin_manager import PluginManager
+    from iracing_telemetry_analyzer_py.src.replay_data import OverlayData
+    from iracing_telemetry_analyzer_py.src.video_editing import VideoEdit  # For type hint
 
 
 # Attempt to import ffmpeg-python
@@ -299,7 +299,7 @@ class FFmpegTranscoder:
         processed_duration = total_duration_seconds # Default to full video duration
 
         if is_highlights:
-            from .video_editing import get_highlight_segments_to_keep, VideoEdit # Local import
+            from iracing_telemetry_analyzer_py.src.video_editing import get_highlight_segments_to_keep, VideoEdit # Local import
 
             print("Generating highlight segments...")
             segments_to_keep: List[VideoEdit] = get_highlight_segments_to_keep(overlay_data, self.settings)
@@ -530,7 +530,7 @@ if __name__ == '__main__':
 
     class MockOverlayData:
         def __init__(self, video_filename):
-            from .replay_data import CapturedVideoFile, RaceEvent # Local import for demo
+            from iracing_telemetry_analyzer_py.src.replay_data import CapturedVideoFile, RaceEvent # Local import for demo
             self.video_files = [CapturedVideoFile(filename=str(video_filename))]
             # For highlight test - create some events
             self.race_events = [
@@ -602,7 +602,7 @@ if __name__ == '__main__':
     print("\n--- Testing Highlight Transcode ---")
     # Ensure video_editing can be imported for highlights
     try:
-        from .video_editing import get_highlight_segments_to_keep # Test import
+        from iracing_telemetry_analyzer_py.src.video_editing import get_highlight_segments_to_keep # Test import
         success_highlight = transcoder.transcode_video(
             overlay_data=mock_overlay_data,
             output_filepath=str(output_highlight_transcode),
@@ -659,4 +659,4 @@ if __name__ == '__main__':
 
     print("\nFFmpegTranscoder Demonstration finished.")
 
-
+```

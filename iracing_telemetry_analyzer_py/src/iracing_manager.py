@@ -247,4 +247,4 @@ if __name__ == '__main__':
     # print("\nTo use this, a concrete class implementing IRacingManagerInterface is needed,")
     # print("which would wrap a specific iRacing Python SDK.")
 
-
+```

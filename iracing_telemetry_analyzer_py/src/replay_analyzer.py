@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Optional, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .iracing_manager import IRacingManagerInterface
-    from .app_settings import AppSettings
-from .utils import dict_to_xml_string # Import the new utility
+    from iracing_telemetry_analyzer_py.src.iracing_manager import IRacingManagerInterface
+    from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
+from iracing_telemetry_analyzer_py.src.utils import dict_to_xml_string # Import the new utility
 
-from .replay_data import (
+from iracing_telemetry_analyzer_py.src.replay_data import (
     OverlayData,
     Driver,
     RaceEvent,
@@ -23,7 +23,7 @@ from .replay_data import (
 )
 
 # Import track location constants
-from .pyirsdk_manager import (
+from iracing_telemetry_analyzer_py.src.pyirsdk_manager import (
     IRSDK_TRK_LOC_NOT_IN_WORLD,
     IRSDK_TRK_LOC_OFF_TRACK,
     IRSDK_TRK_LOC_ON_TRACK,
@@ -809,9 +809,9 @@ if __name__ == '__main__':
             print(f"Demo working folder: {self.working_folder.resolve()}")
 
     # Using PyIrSdkManager, which has its own internal mock if pyirsdk is not available.
-    from .pyirsdk_manager import PyIrSdkManager, PYIRSDK_AVAILABLE, IRSDK_TRK_LOC_ON_TRACK, IRSDK_TRK_LOC_ON_PIT_ROAD, IRSDK_TRK_LOC_IN_PIT_STALL
+    from iracing_telemetry_analyzer_py.src.pyirsdk_manager import PyIrSdkManager, PYIRSDK_AVAILABLE, IRSDK_TRK_LOC_ON_TRACK, IRSDK_TRK_LOC_ON_PIT_ROAD, IRSDK_TRK_LOC_IN_PIT_STALL
     if not PYIRSDK_AVAILABLE:
-        from .pyirsdk_manager import pyirsdk as mock_pyirsdk_module
+        from iracing_telemetry_analyzer_py.src.pyirsdk_manager import pyirsdk as mock_pyirsdk_module
 
     mock_settings = MockAppSettings()
     pyir_manager = PyIrSdkManager() # Will use MockIRSDK if real not found
@@ -1024,4 +1024,4 @@ if __name__ == '__main__':
 
     print("\nReplayAnalyzer Demonstration finished.")
 
-
+```

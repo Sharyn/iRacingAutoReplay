@@ -21,7 +21,7 @@ from typing import List, TYPE_CHECKING
 # Let's assume for now that plugin_manager (and thus its helpers) can be imported
 # if the 'src' directory (parent of 'plugins') is in PYTHONPATH or recognized as a package.
 try:
-    from ..plugin_manager import OverlayPluginInterface, build_drawtext_filter
+    from iracing_telemetry_analyzer_py.src.plugin_manager import OverlayPluginInterface, build_drawtext_filter
 except ImportError:
     # Fallback for cases where relative import fails (e.g. script run directly, or complex loading)
     # This indicates a potential issue with how plugins will resolve dependencies on the core.
@@ -45,8 +45,8 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from ..app_settings import AppSettings
-    from ..replay_data import OverlayData
+    from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
+    from iracing_telemetry_analyzer_py.src.replay_data import OverlayData
 
 
 class SimpleTimestampOverlay(OverlayPluginInterface):
@@ -122,4 +122,4 @@ class SimpleTimestampOverlay(OverlayPluginInterface):
 
 # To make this plugin discoverable, it must be a class implementing OverlayPluginInterface.
 # The PluginManager will instantiate it.
-
+```

@@ -382,4 +382,4 @@ def test_wait_for_iracing_aborted(manager: PyIrSdkManager, monkeypatch):
 
     assert manager.wait_for_iracing_to_start(abort_after_two_calls) is False
     assert abort_call_count >= 3
-
+```

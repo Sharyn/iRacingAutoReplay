@@ -27,8 +27,8 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from .app_settings import AppSettings
-    from .app_state_manager import AppStateManager # For type hinting
+    from iracing_telemetry_analyzer_py.src.app_settings import AppSettings
+    from iracing_telemetry_analyzer_py.src.app_state_manager import AppStateManager # For type hinting
 
 
 class RecorderState(enum.Enum):
@@ -395,4 +395,4 @@ if __name__ == '__main__':
 
     print("\nVideoCaptureManager demonstration finished.")
 
-
+```
